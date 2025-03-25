@@ -216,7 +216,10 @@ read the content of rows.txt file
 ```json
 { "mcpServers": 
 	{ "mcp-browser": 
-		{ "command": "uvx", "args": ["mcp-browser-use"] 
+		{ "command": "uvx", 
+        "args": ["mcp-browser-use"],
+        "env": {},
+        "description": "mcp-browser"
 		} 
 	} 
 }
