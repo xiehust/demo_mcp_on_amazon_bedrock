@@ -13,7 +13,7 @@ import argparse
 import logging
 import asyncio
 from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Literal, AsyncGenerator
+from typing import Dict, Any, List, Optional, Literal, AsyncGenerator, Union
 import uuid
 import threading
 from contextlib import asynccontextmanager
@@ -354,6 +354,49 @@ async def list_mcp_server(
         "server_id": sid, 
         "server_name": name} for sid, name in server_list.items()]})
 
+@app.post("/v1/stop/stream/{stream_id}")
+async def stop_stream(
+    stream_id: str,
+    request: Request,
+    auth: HTTPAuthorizationCredentials = Security(security)
+):
+    """停止正在进行的模型输出流"""
+    global active_streams
+    # 获取用户会话
+    session = await get_or_create_user_session(request, auth)
+    user_id = session.user_id
+    
+    # 检查流是否存在且属于当前用户
+    authorized = True
+    if stream_id in active_streams:
+        if active_streams[stream_id] != user_id:
+            authorized = False
+    else:
+        # 流ID不在活跃列表中，但我们仍然尝试停止它
+        logger.warning(f"Stream {stream_id} not found in active_streams but still trying to stop it")
+    
+    if not authorized:
+        return JSONResponse(content={"errno": -1, "msg": "Not authorized to stop this stream"})
+    
+    # 调用流停止功能，即使流可能已经结束
+    try:
+        success = session.chat_client.stop_stream(stream_id)
+        
+        if success:
+            # 从活跃流列表中移除
+            if stream_id in active_streams:
+                del active_streams[stream_id]
+            return JSONResponse(content={"errno": 0, "msg": "Stream stopping initiated"})
+        else:
+            # 即使返回失败也尝试从活跃流列表中移除，防止僵尸流
+            if stream_id in active_streams:
+                del active_streams[stream_id]
+            logger.warning(f"Failed to stop stream {stream_id}")
+            return JSONResponse(content={"errno": 0, "msg": "Stream may have already completed"})
+    except Exception as e:
+        logger.error(f"Error stopping stream {stream_id}: {e}")
+        return JSONResponse(content={"errno": -1, "msg": f"Error stopping stream: {str(e)}"})
+
 @app.post("/v1/add/mcp_server")
 async def add_mcp_server(
     request: Request,
@@ -398,13 +441,21 @@ async def add_mcp_server(
             server_script_envs = config_json[server_id].get('env',{})
             
         # 连接MCP服务器
-        mcp_client = MCPClient(name=f"{session.user_id}_{server_id}")
+        tool_conf = {}
         try:
-            await mcp_client.connect_to_server(
+            # 创建客户端对象移到try块内
+            mcp_client = MCPClient(name=f"{session.user_id}_{server_id}")
+            
+            # 添加超时控制
+            connect_task = mcp_client.connect_to_server(
                 command=server_cmd,
                 server_script_args=server_script_args,
                 server_script_envs=server_script_envs
             )
+            
+            # 设置30秒超时
+            await asyncio.wait_for(connect_task, timeout=30.0)
+            
             tool_conf = await mcp_client.get_tool_config(server_id=server_id)
             logger.info(f"User {session.user_id} connected to MCP server {server_id}, tools={tool_conf}")
             
@@ -420,16 +471,33 @@ async def add_mcp_server(
             #save conf
             await save_user_mcp_configs()
             
-        except Exception as e:
-            tool_conf = {}
-            logger.error(f"User {session.user_id} connect to MCP server {server_id} error: {e}")
+            # 成功连接后才将客户端添加到用户会话
+            session.mcp_clients[server_id] = mcp_client
+            
+        except asyncio.TimeoutError:
+            logger.error(f"连接MCP服务器 {server_id} 超时")
+            # 清理超时的连接资源
+            try:
+                await mcp_client.cleanup()
+            except Exception as cleanup_error:
+                logger.error(f"清理超时连接资源失败: {cleanup_error}")
             return JSONResponse(content=AddMCPServerResponse(
                 errno=-1,
-                msg="MCP server connect failed!"
+                msg="MCP server connection timeout!"
+            ).model_dump())
+        except Exception as e:
+            logger.error(f"User {session.user_id} connect to MCP server {server_id} error: {e}")
+            # 清理失败的连接资源
+            try:
+                await mcp_client.cleanup()
+            except Exception as cleanup_error:
+                logger.error(f"清理失败连接资源出错: {cleanup_error}")
+            return JSONResponse(content=AddMCPServerResponse(
+                errno=-1,
+                msg=f"MCP server connect failed: {str(e)}"
             ).model_dump())
 
-        # 将客户端添加到用户会话
-        session.mcp_clients[server_id] = mcp_client
+        # 客户端已在成功连接后添加到用户会话
         # 更新全局服务器列表描述
         shared_mcp_server_list[server_id] = server_desc
         await save_user_mcp_configs()
@@ -480,8 +548,23 @@ async def remove_mcp_server(
                 msg=f"Failed to remove server: {str(e)}"
             ).model_dump())
 
-async def stream_chat_response(data: ChatCompletionRequest, session: UserSession) -> AsyncGenerator[str, None]:
+# 活跃流式请求的字典，用于跟踪可以停止的请求
+active_streams = {}
+
+async def stream_chat_response(data: ChatCompletionRequest, session: UserSession, stream_id: str = None) -> AsyncGenerator[str, None]:
     """为特定用户生成流式聊天响应"""
+    # 注册流式请求，便于后续可能的停止操作
+    global active_streams
+    
+    # 注册流
+    if stream_id:
+        try:
+            # 先在ChatClientStream中注册流，然后再添加到active_streams
+            session.chat_client.register_stream(stream_id)
+            active_streams[stream_id] = session.user_id
+            logger.info(f"Stream {stream_id} registered for user {session.user_id}")
+        except Exception as e:
+            logger.error(f"Error registering stream {stream_id}: {e}")
     messages = [{
         "role": x.role,
         "content": [{"text": x.content}],
@@ -511,6 +594,7 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
                 mcp_clients=session.mcp_clients,
                 mcp_server_ids=data.mcp_server_ids,
                 extra_params=data.extra_params,
+                stream_id=stream_id,
                 ):
             
             event_data = {
@@ -566,6 +650,23 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
             # 发送事件
             yield f"data: {json.dumps(event_data)}\n\n"
 
+            # 手动停止流式响应
+            if response["type"] == "stopped":
+                event_data = {
+                    "id": f"stop{time.time_ns()}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": data.model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop_requested"
+                    }]
+                }
+                yield f"data: {json.dumps(event_data)}\n\n"
+                yield "data: [DONE]\n\n"
+                break
+
             # 发送结束标记
             if response["type"] == "message_stop" and response["data"]["stopReason"] == 'end_turn':
                 yield "data: [DONE]\n\n"
@@ -585,6 +686,18 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
         }
         yield f"data: {json.dumps(error_data)}\n\n"
         yield "data: [DONE]\n\n"
+        
+    finally:
+        # 清除活跃流列表中的请求
+        try:
+            if stream_id:
+                # 清理同步：先从ChatClientStream中删除，再从active_streams中删除
+                session.chat_client.unregister_stream(stream_id)
+                if stream_id in active_streams:
+                    del active_streams[stream_id]
+                    logger.info(f"Stream {stream_id} unregistered")
+        except Exception as e:
+            logger.error(f"Error cleaning up stream {stream_id}: {e}")
 
 @app.post("/v1/chat/completions")
 async def chat_completions(
@@ -613,9 +726,12 @@ async def chat_completions(
 
     # 处理流式请求
     if data.stream:
+        # 为流式请求生成唯一ID
+        stream_id = f"stream_{session.user_id}_{time.time_ns()}"
         return StreamingResponse(
-            stream_chat_response(data, session),
-            media_type="text/event-stream"
+            stream_chat_response(data, session, stream_id),
+            media_type="text/event-stream",
+            headers={"X-Stream-ID": stream_id}  # 添加流ID到响应头，便于前端跟踪
         )
 
     # 处理非流式请求

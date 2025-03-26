@@ -31,7 +31,8 @@ class ChatClientStream(ChatClient):
         self.max_retries = 10 # Maximum number of retry attempts
         self.base_delay = 10 # Initial backoff delay in seconds
         self.max_delay = 60 # Maximum backoff delay in seconds
-        self.client_index = 0 
+        self.client_index = 0
+        self.stop_flags = {} # Dict to track stop flags for streams
 
     def get_bedrock_client_from_pool(self):
         if self.bedrock_client_pool:
@@ -86,9 +87,30 @@ class ChatClientStream(ChatClient):
         jitter = random.uniform(0, 0.1 * delay)  # 10% jitter
         return delay + jitter
     
+    def register_stream(self, stream_id):
+        """Register a new stream with a stop flag"""
+        self.stop_flags[stream_id] = False
+        logger.info(f"Registered stream: {stream_id}")
+        
+    def stop_stream(self, stream_id):
+        """Set the stop flag for a stream to terminate it"""
+        if stream_id in self.stop_flags:
+            self.stop_flags[stream_id] = True
+            logger.info(f"Stopping stream: {stream_id}")
+            return True
+        logger.warning(f"Attempted to stop unknown stream: {stream_id}")
+        return False
+        
+    def unregister_stream(self, stream_id):
+        """Clean up the stop flag after a stream completes"""
+        if stream_id in self.stop_flags:
+            del self.stop_flags[stream_id]
+            logger.info(f"Unregistered stream: {stream_id}")
+            
     async def process_query_stream(self, query: str = "",
             model_id="amazon.nova-lite-v1:0", max_tokens=1024, max_turns=30,temperature=0.1,
-            history=[], system=[],mcp_clients=None, mcp_server_ids=[],extra_params={}) -> AsyncGenerator[Dict, None]:
+            history=[], system=[],mcp_clients=None, mcp_server_ids=[],extra_params={},
+            stream_id=None) -> AsyncGenerator[Dict, None]:
         """Submit user query or history messages, and get streaming response.
         
         Similar to process_query but uses converse_stream API for streaming responses.
@@ -140,7 +162,16 @@ class ChatClientStream(ChatClient):
         )
         requestParams = {**requestParams, 'toolConfig': tool_config} if tool_config['tools'] else requestParams
 
+        # Register this stream if an ID is provided
+        if stream_id:
+            self.register_stream(stream_id)
+            
         while turn_i <= max_turns and stop_reason != 'end_turn':
+            # Check if we need to stop
+            if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
+                logger.info(f"Stream {stream_id} was requested to stop")
+                yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                break
             text = ''
             thinking_text = ''
             thinking_signature = ''
@@ -360,3 +391,7 @@ class ChatClientStream(ChatClient):
                 yield {"type": "error", "data": {"error": str(e)}}
                 turn_i = max_turns
                 break
+                
+        # Clean up the stop flag after streaming completes
+        if stream_id:
+            self.unregister_stream(stream_id)
