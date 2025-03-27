@@ -26,8 +26,25 @@
 
 ### 前提条件
 
-- Node.js 22.x 或更高版本, 安装参考：https://nodejs.org/en/download
-- npm 或 yarn 或 pnpm
+- Node.js 22.x 或更高版本, 安装参考：https://nodejs.org/en/download   
+- Linux下安装命令
+```bash
+# Download and install nvm:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+
+# in lieu of restarting the shell
+\. "$HOME/.nvm/nvm.sh"
+
+# Download and install Node.js:
+nvm install 22
+
+# Verify the Node.js version:
+node -v # Should print "v22.14.0".
+nvm current # Should print "v22.14.0".
+
+# Verify npm version:
+npm -v # Should print "10.9.2".
+```
 
 ### 安装步骤
 
