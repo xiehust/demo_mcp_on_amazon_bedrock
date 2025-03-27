@@ -57,6 +57,10 @@ cd demo_mcp_on_amazon_bedrock/react_ui
 ```bash
 npm install
 ```
+- 安装pm2工具
+```bash
+npm -g install pm2
+```
 
 3. 创建环境变量文件
 ```bash
@@ -69,13 +73,27 @@ NEXT_PUBLIC_API_KEY=123456
 NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
 ```
 
-5. 启动前端
+5. 编译前端
 ```bash
 npm run build
-npm run start
 ```
 
-6. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
+6. 使用pm2在后台启动前端
+```bash
+pm2 start pm2run.js
+```
+
+- 其他参考命令
+```bash
+#重启前端
+pm2 restart all
+#stop前端
+pm2 stop all
+#查看日志
+pm2 logs --lines 100
+```
+
+7. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
 
 ## 项目结构
 
