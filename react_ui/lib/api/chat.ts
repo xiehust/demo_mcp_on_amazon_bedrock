@@ -309,7 +309,6 @@ export async function sendChatRequest({
   extraParams?: Record<string, any>;
 }) {
   const baseUrl = getBaseUrl();
-  const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
   
   const payload = {
     messages,
@@ -323,13 +322,16 @@ export async function sendChatRequest({
   
   try {
     if (stream) {
+      // For streaming responses, use our dedicated streaming endpoint
+      const streamUrl = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions-stream`;
+      
       const headers = {
         ...getAuthHeaders(userId),
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
       };
       
-      const response = await fetch(url, {
+      const response = await fetch(streamUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
@@ -344,6 +346,8 @@ export async function sendChatRequest({
       
       return { response, messageExtras: {}, streamId };
     } else {
+      // For non-streaming responses, use the standard endpoint
+      const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
