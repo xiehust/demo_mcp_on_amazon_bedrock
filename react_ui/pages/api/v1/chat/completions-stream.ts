@@ -1,144 +1,189 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { Readable, Transform } from 'stream';
 
-// Base URL for the MCP server backend (internal only)
+// Base URL for the MCP service (internal server-side only)
 const MCP_BASE_URL = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
 
-// Explicitly set response to be unstable (no auto-transform)
+// Configure Next.js API route to allow streaming responses with large payloads
 export const config = {
   api: {
     responseLimit: false,
+    // Set a much larger limit for request body size to accommodate large prompts with images
     bodyParser: {
-      sizeLimit: '1mb',
+      sizeLimit: '50mb',
     },
   },
 };
 
-// Custom NextJS API route to handle streaming data from backend
+/**
+ * Stream processor to ensure complete JSON objects in SSE data lines
+ * This handles the case where JSON gets split across chunks
+ */
+class SseJsonTransform extends Transform {
+  private buffer = '';
+  private dataPrefix = 'data: ';
+  
+  constructor(options = {}) {
+    super({ ...options });
+  }
+  
+  _transform(chunk: Buffer, encoding: string, callback: Function) {
+    // Convert chunk to string and add to buffer
+    const chunkStr = chunk.toString();
+    this.buffer += chunkStr;
+    
+    // Process complete lines in buffer
+    let processedBuffer = '';
+    const lines = this.buffer.split('\n');
+    
+    // Keep the last line in buffer (it might be incomplete)
+    const lastLine = lines.pop() || '';
+    
+    // Process complete lines
+    for (const line of lines) {
+      // If it's a data line that contains JSON, make sure the JSON is complete
+      if (line.startsWith(this.dataPrefix)) {
+        try {
+          const jsonStr = line.substring(this.dataPrefix.length);
+          // Try to parse to verify it's valid JSON
+          JSON.parse(jsonStr);
+          // If we get here, it's valid JSON, so include the line
+          processedBuffer += line + '\n';
+        } catch (e) {
+          // If we can't parse it, it might be an incomplete JSON
+          // Keep it in the buffer by adding it back to the last line
+          this.buffer = line + '\n' + lastLine;
+          break;
+        }
+      } else {
+        // Non-data lines go through as is
+        processedBuffer += line + '\n';
+      }
+    }
+    
+    // Update buffer with the last (potentially incomplete) line
+    this.buffer = lastLine;
+    
+    // Push processed data if we have any
+    if (processedBuffer) {
+      this.push(processedBuffer);
+    }
+    
+    callback();
+  }
+  
+  _flush(callback: Function) {
+    // If there's anything left in the buffer on stream end, push it out
+    if (this.buffer) {
+      this.push(this.buffer);
+    }
+    callback();
+  }
+}
+
+// Stream the conversation completion response from backend to client
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Only accept POST method
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
-
-  // This is critically important - it disables automatic response buffering
-  // This ensures each chunk is sent immediately to the client
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  // Disable nginx buffering if behind nginx
-  res.setHeader('X-Accel-Buffering', 'no');
-  res.status(200);
   
-  // Track if we've already responded
-  let hasResponded = false;
+  // Create an abort controller to handle connection termination
+  const controller = new AbortController();
+  const { signal } = controller;
+  
+  // Set up cleanup on client disconnect
+  req.on('close', () => {
+    controller.abort();
+    console.log('Client disconnected, aborting backend request');
+  });
   
   try {
-    // Prepare headers for backend request
-    const headers: Record<string, string> = {
+    // Forward appropriate headers to the backend service
+    const headers: HeadersInit = {
       'Content-Type': 'application/json',
       'Accept': 'text/event-stream',
     };
-
+    
     if (req.headers.authorization) {
       headers['Authorization'] = req.headers.authorization as string;
     }
-
+    
     if (req.headers['x-user-id']) {
       headers['X-User-ID'] = req.headers['x-user-id'] as string;
     }
     
-    // Make the request to the backend
-    const controller = new AbortController();
-    
-    // Handle client disconnection
-    req.on('close', () => {
-      controller.abort();
-      console.log('Client closed connection');
-    });
-    
-    const backendResponse = await fetch(`${MCP_BASE_URL}/v1/chat/completions`, {
+    // Make the request to the backend service
+    const fetchResponse = await fetch(`${MCP_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers,
       body: JSON.stringify(req.body),
-      signal: controller.signal
+      signal,
     });
-
-    // Check for backend errors
-    if (!backendResponse.ok) {
-      const errorText = await backendResponse.text();
-      console.error('Backend error:', errorText);
-      res.write(`data: ${JSON.stringify({error: `Backend error: ${backendResponse.status}`})}\n\n`);
-      res.end();
-      hasResponded = true;
-      return;
+    
+    if (!fetchResponse.ok) {
+      console.error(`Backend error: ${fetchResponse.status} ${fetchResponse.statusText}`);
+      return res.status(fetchResponse.status).json({
+        error: 'Backend service error',
+        status: fetchResponse.status,
+        message: fetchResponse.statusText,
+      });
     }
     
-    // Get the backend stream
-    const backendStream = backendResponse.body;
+    // Get the response body as a stream
+    const backendStream = fetchResponse.body;
     if (!backendStream) {
-      res.write('data: {"error": "No stream available from backend"}\n\n');
-      res.end();
-      hasResponded = true;
-      return;
+      return res.status(500).json({ error: 'No response stream from backend' });
     }
     
-    const reader = backendStream.getReader();
-    const decoder = new TextDecoder();
+    // Set up our response as a proper server-sent events stream
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Prevent Nginx buffering
+    res.status(200);
     
-    try {
-      let buffer = '';
-      
-      // Process the stream chunk by chunk
-      while (true) {
-        // Get the next chunk
-        const { value, done } = await reader.read();
-        
-        if (done) {
-          // Send any remaining data in buffer
-          if (buffer.length > 0) {
-            res.write(buffer);
-          }
-          // End the response
-          res.end();
-          hasResponded = true;
-          break;
-        }
-        
-        // Decode the chunk
-        const text = decoder.decode(value, { stream: true });
-        buffer += text;
-        
-        // Process complete lines
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          // Extract a complete line
-          const line = buffer.slice(0, newlineIndex + 1);
-          buffer = buffer.slice(newlineIndex + 1);
-          
-          // Write the line to the client IMMEDIATELY
-          res.write(line);
-          
-          // Log a message for each "data:" line for debugging
-          if (line.startsWith('data:')) {
-            console.log('Sent SSE event at:', new Date().toISOString());
-          }
-        }
+    // Use Node.js native streams for reliable forwarding
+    const readable = Readable.fromWeb(backendStream as any);
+    
+    // Create a transform stream to ensure complete JSON objects
+    const jsonTransform = new SseJsonTransform();
+    
+    // Set up the pipeline: readable -> jsonTransform -> response
+    readable
+      .pipe(jsonTransform)
+      .pipe(res);
+    
+    // Handle the end of the stream
+    readable.on('end', () => {
+      console.log('Stream ended properly');
+      // The response will be automatically ended by the pipe
+    });
+    
+    // Handle potential errors in any part of the stream
+    readable.on('error', (err) => {
+      console.error('Stream read error:', err);
+      if (!res.writableEnded) {
+        res.end(`data: ${JSON.stringify({ error: 'Stream read error' })}\n\n`);
       }
-    } catch (e) {
-      console.error('Stream processing error:', e);
-      // Only try to respond if we haven't ended the response already
-      if (!hasResponded) {
-        res.write('data: {"error": "Stream processing error"}\n\n');
-        res.end();
-        hasResponded = true;
+    });
+    
+    jsonTransform.on('error', (err) => {
+      console.error('JSON transform error:', err);
+      if (!res.writableEnded) {
+        res.end(`data: ${JSON.stringify({ error: 'JSON processing error' })}\n\n`);
       }
-    }
+    });
   } catch (error) {
-    console.error('Proxy error:', error);
-    // Only send error if we haven't responded yet
-    if (!hasResponded) {
-      res.write(`data: {"error": "Proxy error: ${error instanceof Error ? error.message : 'Unknown error'}"}\n\n`);
-      res.end();
+    console.error('Error handling streaming request:', error);
+    // Only send response if headers haven't been sent yet
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    } else if (!res.writableEnded) {
+      // If headers sent but response not ended, try to gracefully close the stream
+      res.end(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
     }
   }
 }

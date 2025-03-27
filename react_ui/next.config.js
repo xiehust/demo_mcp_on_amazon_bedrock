@@ -2,11 +2,22 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // Set up environment variables for server-side code
   env: {
-    // Make SERVER_MCP_BASE_URL available to server-side code
     SERVER_MCP_BASE_URL: process.env.SERVER_MCP_BASE_URL,
   },
-  // Allow CORS for API routes if needed
+  // Configure API routes globally
+  api: {
+    // Increase the default response size limit to handle large responses
+    responseLimit: '50mb',
+    // Adjust bodyParser limits
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+    // Do not automatically exit on unhandled errors in API routes
+    externalResolver: true,
+  },
+  // Allow CORS for API routes
   async headers() {
     return [
       {
@@ -20,6 +31,11 @@ const nextConfig = {
       },
     ];
   },
+  // Configure server settings
+  serverRuntimeConfig: {
+    // Keep connections alive for streaming
+    keepAliveTimeout: 120000, // 2 minutes
+  }
 };
 
 module.exports = nextConfig;
