@@ -203,8 +203,7 @@ read the content of rows.txt file
 下面演示如何通过 ChatBot UI 添加 MCP Server，这里以 Web Search 供应商 [Exa](https://exa.ai/) 为例，开源社区已有针对它的 [MCP Server](https://github.com/exa-labs/exa-mcp-server) 可用。  
 首先，前往 [Exa](https://exa.ai/) 官网注册账号，并获取 API Key。  
 然后点击【添加 MCP Server】，在弹出菜单中填写如下参数并提交即可：  
-- 方式1，直接添加MCP json 配置文件(与Anthropic官方格式相同)  
-![](assets/add_mcp_server2.png)  
+- 方式1，直接添加MCP json 配置文件(与Anthropic官方格式相同)   
 ```json
 {
   "mcpServers": {
@@ -219,7 +218,6 @@ read the content of rows.txt file
 }
 ```
 - 方式2，按字段添加 
-![](assets/add_mcp_server.png)  
 
 此时在已有 MCP Server 列表中就可以看到新添加项，勾选即可启动该 MCP Server。
 
