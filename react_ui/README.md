@@ -80,7 +80,7 @@ npm run build
 
 6. 使用pm2在后台启动前端
 ```bash
-pm2 start pm2run.js
+pm2 start pm2run.config.js
 ```
 
 - 其他参考命令
