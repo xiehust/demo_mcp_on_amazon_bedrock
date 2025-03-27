@@ -5,7 +5,7 @@ import { Message } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus,oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 interface ChatMessageProps {
   message: Message;
@@ -144,6 +144,16 @@ function ToolUseDisplay({ tool, index }: { tool: any, index: number }) {
       }
     });
   }
+
+  let toolText = structuredClone(tool);
+  if (!isToolCall && toolText.content) {
+    toolText.content.forEach((block: any) => {
+      if (block.image?.source?.base64) {
+         //assign a new key to the image object
+        block.image.source.base64 = "[BASE64 IMAGE DATA - NOT DISPLAYED]";
+      }
+    });
+  }
   
   return (
     <div className="mb-2">
@@ -156,10 +166,19 @@ function ToolUseDisplay({ tool, index }: { tool: any, index: number }) {
       
       {expanded && (
         <div className="mt-1 p-2 bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 rounded-md text-sm overflow-auto max-h-64">
-          <pre className="whitespace-pre-wrap">
+          {/* <pre className="whitespace-pre-wrap">
             {JSON.stringify(tool, null, 2)}
+          </pre> */}
+          <pre className="whitespace-pre-wrap">
+          <SyntaxHighlighter
+              // @ts-ignore - styles typing issue in react-syntax-highlighter
+              style={oneLight}
+              language={'json'}
+              PreTag="div"
+            >
+               {JSON.stringify(toolText, null, 2)}
+          </SyntaxHighlighter>
           </pre>
-          
           {/* Display images if any */}
           {images.length > 0 && (
             <div className="mt-2 space-y-2">
