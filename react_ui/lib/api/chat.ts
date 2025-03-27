@@ -1,7 +1,17 @@
 import { Message } from '../store/chatStore';
 
-// Get environment variables
-const MCP_BASE_URL = process.env.NEXT_PUBLIC_MCP_BASE_URL || '';
+// Get environment variables with server/client detection
+const getBaseUrl = () => {
+  // Check if we're running on the server or client
+  if (typeof window === 'undefined') {
+    // Server-side: use internal URL
+    return process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
+  } else {
+    // Client-side: use public URL
+    return process.env.NEXT_PUBLIC_MCP_BASE_URL || '';
+  }
+};
+
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 /**
@@ -18,7 +28,8 @@ export const getAuthHeaders = (userId: string) => {
  * Request list of available models
  */
 export async function listModels(userId: string) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/list/models`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/list/models`;
   try {
     const response = await fetch(url, {
       headers: getAuthHeaders(userId)
@@ -40,7 +51,8 @@ export async function listModels(userId: string) {
  * Request list of MCP servers
  */
 export async function listMcpServers(userId: string) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/list/mcp_server`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/list/mcp_server`;
   try {
     const response = await fetch(url, {
       headers: getAuthHeaders(userId)
@@ -70,7 +82,8 @@ export async function addMcpServer(
   env: Record<string, string> | null = null,
   configJson: Record<string, any> = {}
 ) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/add/mcp_server`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/add/mcp_server`;
   
   try {
     const payload: any = {
@@ -233,7 +246,8 @@ export async function stopStream(userId: string, streamId: string) {
     };
   }
 
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/stop/stream/${streamId}`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/stop/stream/${streamId}`;
   
   try {
     const controller = new AbortController();
@@ -294,7 +308,8 @@ export async function sendChatRequest({
   temperature?: number;
   extraParams?: Record<string, any>;
 }) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/chat/completions`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
   
   const payload = {
     messages,
