@@ -1,7 +1,17 @@
 import { Message } from '../store/chatStore';
 
-// Get environment variables
-const MCP_BASE_URL = process.env.NEXT_PUBLIC_MCP_BASE_URL || '';
+// Get environment variables with server/client detection
+const getBaseUrl = () => {
+  // Check if we're running on the server or client
+  if (typeof window === 'undefined') {
+    // Server-side: use internal URL
+    return process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
+  } else {
+    // Client-side: use public URL
+    return process.env.NEXT_PUBLIC_MCP_BASE_URL || '';
+  }
+};
+
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 /**
@@ -18,7 +28,8 @@ export const getAuthHeaders = (userId: string) => {
  * Request list of available models
  */
 export async function listModels(userId: string) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/list/models`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/list/models`;
   try {
     const response = await fetch(url, {
       headers: getAuthHeaders(userId)
@@ -40,7 +51,8 @@ export async function listModels(userId: string) {
  * Request list of MCP servers
  */
 export async function listMcpServers(userId: string) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/list/mcp_server`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/list/mcp_server`;
   try {
     const response = await fetch(url, {
       headers: getAuthHeaders(userId)
@@ -70,7 +82,8 @@ export async function addMcpServer(
   env: Record<string, string> | null = null,
   configJson: Record<string, any> = {}
 ) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/add/mcp_server`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/add/mcp_server`;
   
   try {
     const payload: any = {
@@ -123,6 +136,14 @@ export function processStreamResponse(
   const decoder = new TextDecoder();
   let aborted = false;
   
+  // Buffer for accumulating partial lines
+  let lineBuffer = '';
+  
+  // Buffer for accumulating complete but unparseable events
+  // This handles cases where JSON is split across multiple SSE events
+  let dataBuffer: {[key: string]: string} = {};
+  let currentDataId = '';
+  
   if (!reader) {
     onError('Response body is null');
     return { abort: () => {} };
@@ -135,11 +156,105 @@ export function processStreamResponse(
     reader.cancel().catch(err => console.error('Error canceling reader:', err));
   };
   
+  // Process a single data line that may contain JSON
+  const processData = (data: string) => {
+    if (data === '[DONE]') {
+      // Stream is complete from server side
+      aborted = true;
+      if (onDone) {
+        onDone();
+      }
+      return;
+    }
+    
+    try {
+      // Try parsing the JSON
+      const jsonData = JSON.parse(data);
+      
+      // Extract the message ID if available, to help with buffering
+      const messageId = jsonData.id || '';
+      
+      if (messageId && messageId !== currentDataId) {
+        // We have a new message ID, reset buffers for a new message
+        currentDataId = messageId;
+        dataBuffer[currentDataId] = data;
+      }
+      
+      // Process the data normally
+      const delta = jsonData.choices?.[0]?.delta || {};
+      
+      if ('content' in delta) {
+        onContent(delta.content);
+      }
+      
+      const messageExtras = jsonData.choices?.[0]?.message_extras || {};
+      if ('tool_use' in messageExtras) {
+        onToolUse(JSON.stringify(messageExtras.tool_use));
+      }
+      
+      // Extract thinking content if present
+      const content = delta.content || '';
+      const thinkingMatch = content.match(/<thinking>(.*?)<\/thinking>/s);
+      if (thinkingMatch) {
+        onThinking(thinkingMatch[1]);
+      }
+      
+      // Check if message_extras contains thinking
+      if (messageExtras && messageExtras.thinking) {
+        onThinking(messageExtras.thinking);
+      }
+      
+    } catch (e) {
+      // JSON parsing failed
+      
+      // Check if we have a partial JSON that might be continued in next chunks
+      if (data.includes('"choices"') && !data.endsWith('}}')) {
+        // This looks like a partial JSON message
+        // Store in buffer using a generic ID if we don't have one yet
+        const bufferId = currentDataId || '_partial';
+        dataBuffer[bufferId] = data;
+        console.warn('Buffering partial JSON for later processing');
+      } else if (currentDataId && dataBuffer[currentDataId]) {
+        // Try to append this data to our existing buffer for this message
+        dataBuffer[currentDataId] += data;
+        
+        // Try parsing the combined buffer
+        try {
+          const combinedData = JSON.parse(dataBuffer[currentDataId]);
+          
+          // If we get here, parsing succeeded, so process the combined data
+          const delta = combinedData.choices?.[0]?.delta || {};
+          
+          if ('content' in delta) {
+            onContent(delta.content);
+          }
+          
+          const messageExtras = combinedData.choices?.[0]?.message_extras || {};
+          if ('tool_use' in messageExtras) {
+            onToolUse(JSON.stringify(messageExtras.tool_use));
+          }
+          
+          // Clear the buffer now that we've successfully processed it
+          delete dataBuffer[currentDataId];
+        } catch (e2) {
+          // Still can't parse, just log and wait for more data
+          console.warn('Failed to parse combined JSON buffer:', e2);
+        }
+      } else {
+        // This doesn't look like a partial JSON or we can't combine it
+        console.error('Failed to parse JSON:', e);
+        // Don't report the error to the user for every chunk - it makes the UI noisy
+        // Only report critical errors that stop the stream
+      }
+    }
+  };
+  
   const processChunk = async () => {
     if (aborted) {
       if (onDone) onDone();
       return;
     }
+    
     try {
       // If already aborted before trying to read, exit immediately
       if (aborted) {
@@ -155,48 +270,24 @@ export function processStreamResponse(
         return;
       }
       
+      // Decode the chunk and add to our line buffer
       const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-      for (const line of lines) {
+      lineBuffer += chunk;
+      
+      // Process complete lines
+      let newlineIndex;
+      
+      // Continue extracting lines until no more newlines are found
+      while ((newlineIndex = lineBuffer.indexOf('\n')) !== -1) {
+        // Extract the complete line
+        const line = lineBuffer.substring(0, newlineIndex);
+        // Remove the processed line from the buffer
+        lineBuffer = lineBuffer.substring(newlineIndex + 1);
+        
+        // Process data lines
         if (line.startsWith('data: ')) {
           const data = line.substring(6); // Remove 'data: ' prefix
-          
-          if (data === '[DONE]') {
-            // Stream is complete from server side, mark as aborted to stop processing
-            aborted = true;
-            if (onDone) {
-              onDone();
-            }
-            return;
-          }
-          
-          try {
-            const jsonData = JSON.parse(data);
-            const delta = jsonData.choices[0]?.delta || {};
-            
-            if ('content' in delta) {
-              onContent(delta.content);
-            }
-            
-            const messageExtras = jsonData.choices[0]?.message_extras || {};
-            if ('tool_use' in messageExtras) {
-              onToolUse(JSON.stringify(messageExtras.tool_use));
-            }
-            
-            // Extract thinking content if present
-            const content = jsonData.choices[0]?.delta?.content || '';
-            const thinkingMatch = content.match(/<thinking>(.*?)<\/thinking>/s);
-            if (thinkingMatch) {
-              onThinking(thinkingMatch[1]);
-            }
-            
-            // Check if message_extras contains thinking
-            if (messageExtras && messageExtras.thinking) {
-              onThinking(messageExtras.thinking);
-            }
-          } catch (e) {
-            console.error('Failed to parse JSON:', data, e);
-          }
+          processData(data);
         }
       }
       
@@ -208,6 +299,7 @@ export function processStreamResponse(
       }
     } catch (error) {
       if (!aborted) {
+        console.error('Stream processing error:', error);
         onError(`Error processing stream: ${error}`);
       }
       if (onDone) onDone();
@@ -233,7 +325,8 @@ export async function stopStream(userId: string, streamId: string) {
     };
   }
 
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/stop/stream/${streamId}`;
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/stop/stream/${streamId}`;
   
   try {
     const controller = new AbortController();
@@ -294,7 +387,7 @@ export async function sendChatRequest({
   temperature?: number;
   extraParams?: Record<string, any>;
 }) {
-  const url = `${MCP_BASE_URL.replace(/\/$/, '')}/v1/chat/completions`;
+  const baseUrl = getBaseUrl();
   
   const payload = {
     messages,
@@ -308,13 +401,16 @@ export async function sendChatRequest({
   
   try {
     if (stream) {
+      // For streaming responses, use our dedicated streaming endpoint
+      const streamUrl = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions-stream`;
+      
       const headers = {
         ...getAuthHeaders(userId),
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream'
       };
       
-      const response = await fetch(url, {
+      const response = await fetch(streamUrl, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
@@ -329,6 +425,8 @@ export async function sendChatRequest({
       
       return { response, messageExtras: {}, streamId };
     } else {
+      // For non-streaming responses, use the standard endpoint
+      const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {

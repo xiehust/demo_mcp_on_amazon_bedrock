@@ -26,8 +26,25 @@
 
 ### 前提条件
 
-- Node.js 22.x 或更高版本, 安装参考：https://nodejs.org/en/download
-- npm 或 yarn 或 pnpm
+- Node.js 22.x 或更高版本, 安装参考：https://nodejs.org/en/download   
+- Linux下安装命令
+```bash
+# Download and install nvm:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.2/install.sh | bash
+
+# in lieu of restarting the shell
+\. "$HOME/.nvm/nvm.sh"
+
+# Download and install Node.js:
+nvm install 22
+
+# Verify the Node.js version:
+node -v # Should print "v22.14.0".
+nvm current # Should print "v22.14.0".
+
+# Verify npm version:
+npm -v # Should print "10.9.2".
+```
 
 ### 安装步骤
 
@@ -39,6 +56,10 @@ cd demo_mcp_on_amazon_bedrock/react_ui
 2. 安装依赖
 ```bash
 npm install
+```
+- 安装pm2工具
+```bash
+npm -g install pm2
 ```
 
 3. 创建环境变量文件
@@ -52,13 +73,27 @@ NEXT_PUBLIC_API_KEY=123456
 NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
 ```
 
-5. 启动前端
+5. 编译前端
 ```bash
 npm run build
-npm run start
 ```
 
-6. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
+6. 使用pm2在后台启动前端
+```bash
+pm2 start pm2run.config.js
+```
+
+- 其他参考命令
+```bash
+#重启前端
+pm2 restart all
+#stop前端
+pm2 stop all
+#查看日志
+pm2 logs --lines 100
+```
+
+7. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
 
 ## 项目结构
 
