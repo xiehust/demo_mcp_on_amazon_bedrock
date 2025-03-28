@@ -130,6 +130,50 @@ export const useStore = create<ChatStore>()(
     }),
     {
       name: 'mcp-chat-store',
+      partialize: (state) => {
+        // Create a copy of messages without base64 images to stay under localStorage quota
+        const messagesForStorage = state.messages.map(message => {
+          // Keep the message content but remove large tool use data with base64 images
+          const { toolUse, ...rest } = message;
+          
+          // If there's no tool use data, return the message as is
+          if (!toolUse) return rest;
+          
+          // Otherwise clean up the tool use data to remove any large base64 images
+          const cleanToolUse = toolUse.map(tool => {
+            // Clone the tool to avoid modifying the original
+            const cleanTool = { ...tool };
+            
+            // Handle tool results with content array
+            if (cleanTool.content) {
+              cleanTool.content = cleanTool.content.map((block: any) => {
+                // Remove base64 image data but keep reference that image existed
+                if (block.image?.source?.base64) {
+                  return {
+                    ...block,
+                    image: {
+                      ...block.image,
+                      source: { base64: "[BASE64_IMAGE_DATA_REMOVED]" }
+                    }
+                  };
+                }
+                return block;
+              });
+            }
+            
+            return cleanTool;
+          });
+          
+          return { ...rest, toolUse: cleanToolUse };
+        });
+        
+        // Return a filtered state object for localStorage
+        return {
+          ...state,
+          // Only store the latest 20 messages to prevent quota issues
+          messages: messagesForStorage.slice(-20)
+        };
+      }
     }
   )
 )
