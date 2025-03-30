@@ -227,6 +227,7 @@ read the content of rows.txt file
 ## 5 Demo cases
 ### 5.1.使用MCP操作Browser浏览器 
 - 在chatbot界面上添加这个json文件,注意：这个[browser use](https://github.com/vinayak-mehta/mcp-browser-use)server默认启动有头模式的浏览器，因此适合在本地电脑部署的demo中，如果在服务器端部署，请在提示词里加一句`use headless is true to initialize the browser`
+**注意** 第一次运行时，需要在服务安装对应的依赖包 `sudo apt-get install libgbm1`  
 ```json
 { "mcpServers": 
 	{ "mcp-browser": 
@@ -238,7 +239,22 @@ read the content of rows.txt file
 	} 
 }
 ```  
-**注意** 第一次运行时，需要在服务安装对应的依赖包 `sudo apt-get install libgbm1`  
+
+- **New added 20250331** 使用MS官方[playwright](https://mcp.so/server/playwright-mcp/microsoft):   
+**注意** 如果需要无头模式则添加"--headless"参数，第一次运行时，需要在服务安装对应的依赖包 `npx playwright install chrome`  
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--headless"
+      ]
+    }
+  }
+}
+```
 
 - test 1, 在chatbot界面中，勾选mcp-browser和local file system 2个server  
 输入任务：`帮我整理一份关于小米SU7 ultra的介绍，包括性能，价格，特色功能，图文并茂，并制作成精美的HTML保存到本地目录中.如果引用了其他网站的图片，确保图片真实存在，并且可以访问。`  
