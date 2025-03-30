@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'MCP on Amazon Bedrock',
-  description: 'Modern chatbot interface for Amazon Bedrock with MCP support',
+  description: 'An autonomous Agent by Amazon Bedrock with MCP',
 }
 
 export default function RootLayout({

@@ -39,7 +39,7 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
       
       {/* Message Content */}
       <div className={cn(
-        "flex flex-col space-y-2 max-w-3xl",
+        "flex flex-col space-y-2 max-w-5xl",
         message.role === 'user' ? "items-start" : "items-start"
       )}>
         {/* Role Label */}
@@ -70,7 +70,7 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
                 ) : (
                   <SyntaxHighlighter
                     // @ts-ignore - styles typing issue in react-syntax-highlighter
-                    style={vscDarkPlus}
+                    style={oneLight}
                     language={match?.[1] || 'text'}
                     PreTag="div"
                     {...rest}
