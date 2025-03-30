@@ -239,6 +239,9 @@ Now you can see the newly added item in the existing MCP Server list. Check it t
 	} 
 }
 ```
+**Notice** When you run it first time, you might need to install dependencies in your server via `sudo apt-get install libgbm1`  
+
+
 - Test 1: In the chatbot interface, check both mcp-browser and local file system servers.
 Input task: `Help me create a comprehensive introduction about Xiaomi SU7 Ultra, including performance, price, special features, with rich text and images, and save it as a beautiful HTML file in the local directory. If you reference images from other websites, ensure the images actually exist and are accessible.`
 [Video demo](https://mp.weixin.qq.com/s/csg7N8SHoIR2WBgFOjpm6A)
@@ -255,9 +258,9 @@ Input task: `I want a comprehensive analysis of Tesla stock, including: Overview
 ### 5.2 Using MCP Computer Use to Operate EC2 Remote Desktop
 - In another directory, install and download remote-computer-use:
 ```bash
-git clone https://github.com/xiehust/sample-mcp-servers.git
+git clone https://github.com/aws-samples/mcp-servers-for-bedrock-samples.git
 ```
-- You need to set up an EC2 instance with VNC remote desktop configured in advance. For installation steps, please refer to [instructions](https://github.com/xiehust/sample-mcp-servers/blob/main/remote_computer_use/README.md)
+- You need to set up an EC2 instance with VNC remote desktop configured in advance. For installation steps, please refer to [instructions](https://github.com/aws-samples/mcp-servers-for-bedrock-samples/blob/main/remote_computer_use/README.md)
 - After setting up the environment, configure the MCP demo client as follows:
 ```json
 {
