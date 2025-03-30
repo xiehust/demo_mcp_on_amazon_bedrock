@@ -155,7 +155,7 @@ class MCPClient:
         # List available tools
         response = await self.session.list_tools()
         tools = response.tools
-        logger.info(f"\nConnected to server [{self.name}] with tools: " + str([tool.name for tool in tools]))
+        logger.info(f"\nConnected to server [{self.name}] with tools: " + str([tool for tool in tools]))
 
     async def get_tool_config(self, model_provider='bedrock', server_id : str = ''):
         """Get llm's tool usage config via MCP server"""
