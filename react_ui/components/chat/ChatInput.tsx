@@ -5,12 +5,16 @@ import { Button } from '@/components/ui/button';
 import { useStore, Message } from '@/lib/store';
 import { sendChatRequest, processStreamResponse, stopStream } from '@/lib/api/chat';
 import { extractThinking, extractToolUse } from '@/lib/utils';
+import { FileUpload, FileItem } from './FileUpload';
+import { Paperclip } from 'lucide-react';
 
 export function ChatInput() {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamId, setCurrentStreamId] = useState<string | null>(null);
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [showFileUpload, setShowFileUpload] = useState(false);
   const abortControllerRef = useRef<{ abort: () => void } | null>(null);
   
   const {
@@ -79,14 +83,61 @@ export function ChatInput() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!prompt.trim() || isLoading || !selectedModel) return;
+    if ((!prompt.trim() && files.length === 0) || isLoading || !selectedModel) return;
     
-    // Add user message to chat
-    const userMessage: Message = { role: 'user', content: prompt };
+    // Prepare user message content
+    let userMessage: Message;
+    
+    if (files.length > 0) {
+      // Create structured message with files
+      const messageContent = [];
+      
+      // Add text content if present
+      if (prompt.trim()) {
+        messageContent.push({
+          type: 'text',
+          text: prompt
+        });
+      }
+      
+      // Add file content
+      files.forEach(file => {
+        if (file.type.startsWith('image/')) {
+          // For images, use image_url type
+          messageContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${file.type};base64,${file.data}`,
+              detail: 'auto'
+            }
+          });
+        } else {
+          // For other files, use file type
+          messageContent.push({
+            type: 'file',
+            file: {
+              file_data: file.data,
+              filename: file.name
+            }
+          });
+        }
+      });
+      
+      userMessage = { 
+        role: 'user', 
+        content: messageContent
+      };
+    } else {
+      // Simple text-only message
+      userMessage = { role: 'user', content: prompt };
+    }
+    
     addMessage(userMessage);
     
-    // Clear input
+    // Clear input and files
     setPrompt('');
+    setFiles([]);
+    setShowFileUpload(false);
     setIsLoading(true);
     
     try {
@@ -265,43 +316,70 @@ export function ChatInput() {
     }
   };
   
+  const handleAddFiles = (newFiles: FileItem[]) => {
+    setFiles([...files, ...newFiles]);
+  };
+  
+  const handleRemoveFile = (fileId: string) => {
+    setFiles(files.filter(file => file.id !== fileId));
+  };
+  
   return (
     <div className="p-4 border-t">
-      <form onSubmit={handleSubmit} className="flex items-center space-x-2">
-      <div className="relative flex-1">
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Type your message..."
-          className="w-full p-3 pr-12 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[60px]"
-          rows={1}
-          disabled={isLoading}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSubmit(e);
-            }
-          }}
+      {showFileUpload && (
+        <FileUpload 
+          files={files}
+          onAddFiles={handleAddFiles}
+          onRemoveFile={handleRemoveFile}
         />
-      </div>
-      
-      {isStreaming ? (
-        <Button 
-          type="button"
-          onClick={handleStopGeneration}
-          className="h-10 bg-red-500 hover:bg-red-600"
-        >
-          Stop
-        </Button>
-      ) : (
-        <Button 
-          type="submit" 
-          disabled={isLoading || !prompt.trim() || !selectedModel}
-          className="h-10"
-        >
-          {isLoading ? 'Sending...' : 'Send'}
-        </Button>
       )}
+      
+      <form onSubmit={handleSubmit} className="flex items-center space-x-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={`h-10 w-10 ${showFileUpload ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+          onClick={() => setShowFileUpload(!showFileUpload)}
+          disabled={isLoading}
+        >
+          <Paperclip className="h-5 w-5" />
+        </Button>
+        
+        <div className="relative flex-1">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder={files.length > 0 ? "Add a message or send files..." : "Type your message..."}
+            className="w-full p-3 pr-12 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none min-h-[60px]"
+            rows={1}
+            disabled={isLoading}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
+          />
+        </div>
+        
+        {isStreaming ? (
+          <Button 
+            type="button"
+            onClick={handleStopGeneration}
+            className="h-10 bg-red-500 hover:bg-red-600"
+          >
+            Stop
+          </Button>
+        ) : (
+          <Button 
+            type="submit" 
+            disabled={isLoading || (!prompt.trim() && files.length === 0) || !selectedModel}
+            className="h-10"
+          >
+            {isLoading ? 'Sending...' : 'Send'}
+          </Button>
+        )}
       </form>
     </div>
   );

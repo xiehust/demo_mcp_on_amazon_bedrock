@@ -3,9 +3,23 @@ import { persist } from 'zustand/middleware';
 
 export type MessageRole = 'system' | 'user' | 'assistant';
 
+export interface ContentItem {
+  type: string;
+  text?: string;
+  image_url?: {
+    url: string;
+    detail?: string;
+  };
+  file?: {
+    file_id?: string;
+    file_data?: string;
+    filename?: string;
+  };
+}
+
 export interface Message {
   role: MessageRole;
-  content: string;
+  content: string | ContentItem[];
   toolUse?: any[];
   thinking?: string;
 }

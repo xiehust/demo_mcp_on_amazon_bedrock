@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus,oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { FileText, File } from 'lucide-react';
 
 interface ChatMessageProps {
   message: Message;
@@ -54,35 +55,103 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
             ? "bg-blue-50 text-blue-900 dark:bg-blue-900/20 dark:text-blue-100" 
             : "bg-white border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
         )}>
-          {/* Markdown Content */}
-          <ReactMarkdown
-            className="prose prose-sm max-w-none dark:prose-invert"
-            components={{
-              code(props) {
-                const { children, className, node, ...rest } = props;
-                const match = /language-(\w+)/.exec(className || '');
-                const isInline = !match;
-                
-                return isInline ? (
-                  <code className={className} {...rest}>
-                    {children}
-                  </code>
-                ) : (
-                  <SyntaxHighlighter
-                    // @ts-ignore - styles typing issue in react-syntax-highlighter
-                    style={oneLight}
-                    language={match?.[1] || 'text'}
-                    PreTag="div"
-                    {...rest}
-                  >
-                    {String(children).replace(/\n$/, '')}
-                  </SyntaxHighlighter>
-                );
-              }
-            }}
-          >
-            {message.content + (isLoading ? '▌' : '')}
-          </ReactMarkdown>
+          {/* Structured Content or Markdown */}
+          {typeof message.content === 'string' ? (
+            // Regular markdown content
+            <ReactMarkdown
+              className="prose prose-sm max-w-none dark:prose-invert"
+              components={{
+                code(props) {
+                  const { children, className, node, ...rest } = props;
+                  const match = /language-(\w+)/.exec(className || '');
+                  const isInline = !match;
+                  
+                  return isInline ? (
+                    <code className={className} {...rest}>
+                      {children}
+                    </code>
+                  ) : (
+                    <SyntaxHighlighter
+                      // @ts-ignore - styles typing issue in react-syntax-highlighter
+                      style={oneLight}
+                      language={match?.[1] || 'text'}
+                      PreTag="div"
+                      {...rest}
+                    >
+                      {String(children).replace(/\n$/, '')}
+                    </SyntaxHighlighter>
+                  );
+                }
+              }}
+            >
+              {message.content + (isLoading ? '▌' : '')}
+            </ReactMarkdown>
+          ) : (
+            // Structured content (array of ContentItem)
+            <div className="space-y-4">
+              {message.content.map((item, index) => (
+                <div key={index}>
+                  {/* Text content */}
+                  {item.type === 'text' && item.text && (
+                    <ReactMarkdown
+                      className="prose prose-sm max-w-none dark:prose-invert"
+                      components={{
+                        code(props) {
+                          const { children, className, node, ...rest } = props;
+                          const match = /language-(\w+)/.exec(className || '');
+                          const isInline = !match;
+                          
+                          return isInline ? (
+                            <code className={className} {...rest}>
+                              {children}
+                            </code>
+                          ) : (
+                            <SyntaxHighlighter
+                              // @ts-ignore - styles typing issue in react-syntax-highlighter
+                              style={oneLight}
+                              language={match?.[1] || 'text'}
+                              PreTag="div"
+                              {...rest}
+                            >
+                              {String(children).replace(/\n$/, '')}
+                            </SyntaxHighlighter>
+                          );
+                        }
+                      }}
+                    >
+                      {item.text}
+                    </ReactMarkdown>
+                  )}
+                  
+                  {/* Image content */}
+                  {item.type === 'image_url' && item.image_url?.url && (
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden max-w-lg">
+                      <img 
+                        src={item.image_url.url}
+                        alt="Attached image" 
+                        className="w-full h-auto object-contain"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* File content */}
+                  {item.type === 'file' && item.file && (
+                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-700">
+                      <FileText className="h-5 w-5 text-blue-600" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{item.file.filename || "Attached file"}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {item.file.file_id ? "File ID: " + item.file.file_id : "File attached"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              
+              {isLoading && <span className="animate-pulse">▌</span>}
+            </div>
+          )}
         </div>
         
         {/* Thinking Section (if available) */}

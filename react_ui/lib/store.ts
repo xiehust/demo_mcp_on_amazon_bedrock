@@ -1,9 +1,23 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+export type ContentItem = {
+  type: string;
+  text?: string;
+  image_url?: {
+    url: string;
+    detail?: string;
+  };
+  file?: {
+    file_id?: string;
+    file_data?: string;
+    filename?: string;
+  };
+}
+
 export type Message = {
   role: 'system' | 'user' | 'assistant'
-  content: string
+  content: string | ContentItem[]
   thinking?: string
   toolUse?: any[]
 }
@@ -23,7 +37,7 @@ interface ChatStore {
   // Messages
   messages: Message[]
   addMessage: (message: Message) => void
-  updateLastMessage: (content: string, thinking?: string, toolUse?: any[]) => void
+  updateLastMessage: (content: string | ContentItem[], thinking?: string, toolUse?: any[]) => void
   clearMessages: () => void
   
   // Settings
