@@ -20,9 +20,28 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       // Initialize user ID
       if (!userId) {
         // Check if user ID exists in localStorage
-        const storedUserId = localStorage.getItem('mcp_chat_user_id');
+        let storedUserId = localStorage.getItem('mcp_chat_user_id');
         if (storedUserId) {
-          setUserId(storedUserId);
+          // Try to parse the stored ID in case it's a JSON object
+          try {
+            const parsedId = JSON.parse(storedUserId);
+            // If it's an object with the expected key, extract the actual ID
+            if (parsedId && typeof parsedId === 'object' && parsedId.mcp_chat_user_id) {
+              storedUserId = parsedId.mcp_chat_user_id;
+            }
+          } catch (e) {
+            // If parsing fails, assume it's a plain string ID and continue
+          }
+          
+          // Ensure we have a valid string before setting the user ID
+          if (storedUserId) {
+            setUserId(storedUserId);
+          } else {
+            // If for some reason the ID is not valid, generate a new one
+            const newUserId = uuidv4().substring(0, 8);
+            setUserId(newUserId);
+            localStorage.setItem('mcp_chat_user_id', newUserId);
+          }
         } else {
           // Generate new random user ID
           const newUserId = uuidv4().substring(0, 8);
