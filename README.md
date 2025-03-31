@@ -167,16 +167,15 @@ curl http://127.0.0.1:7002/v1/chat/completions \
   }'
 ```
 
-### 3.3 UI
-#### (🚀 New) React UI
-- 🚀 基于Next.js 14和React 18构建的现代化前端，支持Dark/Light模式
+### 3.3  (🚀 New) React UI
+- 🚀 基于Next.js 15和React 18构建的现代化前端，支持Dark/Light模式
 - 🎨 使用Tailwind CSS和Shadcn UI组件库实现美观的用户界面
 - 🔄 实时流式响应，提供流畅的对话体验
 - 🧠 支持"思考"模式，展示模型的推理过程
 - 🛠️ MCP服务器管理功能，支持添加和配置服务器
 - 👤 用户会话管理，保持对话上下文
 - 📊 可视化工具使用结果，包括图像显示
-- 📱 响应式设计，适配各种设备尺寸
+- 📱 支持多模态输入，包括图片，pdf，文档等附件上传
 - [安装步骤](react_ui/README.md)
 ![alt text](react_ui/image.png)
 ![alt text](react_ui/image-1.png)
