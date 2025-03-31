@@ -7,11 +7,15 @@ FastAPI server for Bedrock Chat with MCP support
 """
 import os
 import sys
+import re
 import json
 import time
 import argparse
 import logging
 import asyncio
+import base64
+import mimetypes
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Literal, AsyncGenerator, Union
 import uuid
@@ -241,10 +245,60 @@ async def cleanup_inactive_sessions():
         if inactive_users:
             logger.info(f"已清理 {len(inactive_users)} 个不活跃用户会话")
 
-            
+
+def hash_filename(filepath, algorithm='md5'):
+    """
+    对文件名进行哈希处理，但保留原始扩展名
+    """
+    filename = os.path.basename(filepath)
+    base, ext = os.path.splitext(filename)
+    
+    hash_obj = hashlib.md5(base.encode('utf-8'))
+    hashed_base = hash_obj.hexdigest()
+    
+    return hashed_base + ext
+
+def clean_filename(filename):
+    """清理文件名，只保留允许的字符，并移除连续空格"""
+    # 分离文件名和扩展名
+    name, ext = os.path.splitext(filename)
+    
+    # 只保留允许的字符（字母数字、空格、连字符、圆括号和方括号）
+    cleaned_name = re.sub(r'[^a-zA-Z0-9\s\-\(\)\[\]]', '', name)
+    
+    # 将连续的空格替换为单个空格
+    cleaned_name = re.sub(r'\s+', ' ', cleaned_name)
+    
+    # 返回清理后的文件名加扩展名
+    return cleaned_name + ext
+        
+class TextContent(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+class ImageUrl(BaseModel):
+    url: str
+    detail: Optional[str] = "auto"
+
+class ImageUrlContent(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageUrl
+
+class FileObject(BaseModel):
+    file_id: Optional[str] = None
+    file_data: Optional[str] = None
+    filename: Optional[str] = None
+
+class FileContent(BaseModel):
+    type: Literal["file"] = "file"
+    file: FileObject
+
+# Content can be either text, image_url, or file
+ContentPart = Union[TextContent, ImageUrlContent, FileContent]
+
 class Message(BaseModel):
     role: str
-    content: str
+    content: Union[str, List[ContentPart]]
 
 class ChatCompletionRequest(BaseModel):
     messages: List[Message]
@@ -581,13 +635,106 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
             logger.info(f"Stream {stream_id} registered for user {session.user_id}")
         except Exception as e:
             logger.error(f"Error registering stream {stream_id}: {e}")
-    messages = [{
-        "role": x.role,
-        "content": [{"text": x.content}],
-    } for x in data.messages]
+    # Process messages with possible structured content
+    messages = []
+    for file_idx, msg in enumerate(data.messages):
+        message_content = []
+        
+        # Handle string content (backward compatibility)
+        if isinstance(msg.content, str):
+            message_content = [{"text": msg.content}]
+        # Handle structured content (OpenAI format)
+        else:
+            for content_item in msg.content:
+                # Text content
+                if content_item.type == "text":
+                    message_content.append({"text": content_item.text})
+                
+                # Image content
+                elif content_item.type == "image_url":
+                    image_url = content_item.image_url.url
+                    
+                    # Handle base64 encoded images
+                    if image_url.startswith("data:image/"):
+                        try:
+                            # Parse data URI format: data:image/png;base64,ABC123...
+                            parts = image_url.split(";base64,")
+                            if len(parts) == 2:
+                                img_format = parts[0].split("/")[1]
+                                base64_data = parts[1]
+                                img_bytes = base64.b64decode(base64_data)
+                                
+                                message_content.append({
+                                    "image": {
+                                        "format": img_format,
+                                        "source": {
+                                            "bytes": img_bytes
+                                        }
+                                    }
+                                })
+                        except Exception as e:
+                            logger.error(f"Error processing base64 image: {e}")
+                    else:
+                        logger.warning(f"External image URLs not supported yet: {image_url}")
+                
+                # File content
+                elif content_item.type == "file":
+                    file_obj = content_item.file
+                    
+                    # Handle base64 encoded file data
+                    if file_obj.file_data:
+                        try:
+                            file_data = base64.b64decode(file_obj.file_data)
+                            filename = file_obj.filename or "unnamed_file"
+                            # Determine file format from filename or mime type
+                            file_ext = os.path.splitext(filename)[1].lower().replace(".", "")
+                            if not file_ext:
+                                file_ext = "txt"  # Default to txt if no extension
+                                
+                            # Map to Bedrock document format
+                            doc_format_map = {
+                                "pdf": "pdf",
+                                "csv": "csv", 
+                                "doc": "doc",
+                                "docx": "docx",
+                                "xls": "xls", 
+                                "xlsx": "xlsx",
+                                "html": "html",
+                                "txt": "txt",
+                                "md": "md",
+                                "json": "txt",  # JSON treated as text
+                                "xml": "txt",   # XML treated as text
+                                "py": "txt",    # Python file treated as text
+                                "js": "txt",    # JS file treated as text
+                                "ts": "txt",    # TS file treated as text
+                            }
+                            
+                            doc_format = doc_format_map.get(file_ext, "txt")
+                            
+                            message_content.append({
+                                "document": {
+                                    "format": doc_format,
+                                    "name": f"files_{file_idx}",
+                                    "source": {
+                                        "bytes": file_data
+                                    }
+                                }
+                            })
+                        except Exception as e:
+                            logger.error(f"Error processing file data: {e}")
+                    
+                    # Handle file_id (not implemented in this version)
+                    elif file_obj.file_id:
+                        logger.warning(f"File ID references not implemented yet: {file_obj.file_id}")
+        
+        messages.append({
+            "role": msg.role,
+            "content": message_content
+        })
+    
     system = []
     if messages and messages[0]['role'] == 'system':
-        system = [{"text":messages[0]['content'][0]["text"]}] if messages[0]['content'][0]["text"] else []
+        system = messages[0]['content'] if messages[0]['content'] else []
         messages = messages[1:]
 
     # bedrock's first turn cannot be assistant
@@ -751,10 +898,102 @@ async def chat_completions(
         )
 
     # 处理非流式请求
-    messages = [{
-        "role": x.role,
-        "content": [{"text": x.content}],
-    } for x in data.messages]
+    messages = []
+    for file_idx, msg in enumerate(data.messages):
+        message_content = []
+        
+        # Handle string content (backward compatibility)
+        if isinstance(msg.content, str):
+            message_content = [{"text": msg.content}]
+        # Handle structured content (OpenAI format)
+        else:
+            for content_item in msg.content:
+                # Text content
+                if content_item.type == "text":
+                    message_content.append({"text": content_item.text})
+                
+                # Image content
+                elif content_item.type == "image_url":
+                    image_url = content_item.image_url.url
+                    
+                    # Handle base64 encoded images
+                    if image_url.startswith("data:image/"):
+                        try:
+                            # Parse data URI format: data:image/png;base64,ABC123...
+                            parts = image_url.split(";base64,")
+                            if len(parts) == 2:
+                                img_format = parts[0].split("/")[1]
+                                base64_data = parts[1]
+                                img_bytes = base64.b64decode(base64_data)
+                                
+                                message_content.append({
+                                    "image": {
+                                        "format": img_format,
+                                        "source": {
+                                            "bytes": img_bytes
+                                        }
+                                    }
+                                })
+                        except Exception as e:
+                            logger.error(f"Error processing base64 image: {e}")
+                    else:
+                        logger.warning(f"External image URLs not supported yet: {image_url}")
+                
+                # File content
+                elif content_item.type == "file":
+                    file_obj = content_item.file
+                    
+                    # Handle base64 encoded file data
+                    if file_obj.file_data:
+                        try:
+                            file_data = base64.b64decode(file_obj.file_data)
+                            filename = file_obj.filename or "unnamed_file"
+                            filename = hash_filename(filename)
+                            # Determine file format from filename or mime type
+                            file_ext = os.path.splitext(filename)[1].lower().replace(".", "")
+                            if not file_ext:
+                                file_ext = "txt"  # Default to txt if no extension
+                                
+                            # Map to Bedrock document format
+                            doc_format_map = {
+                                "pdf": "pdf",
+                                "csv": "csv", 
+                                "doc": "doc",
+                                "docx": "docx",
+                                "xls": "xls", 
+                                "xlsx": "xlsx",
+                                "html": "html",
+                                "txt": "txt",
+                                "md": "md",
+                                "json": "txt",  # JSON treated as text
+                                "xml": "txt",   # XML treated as text
+                                "py": "txt",    # Python file treated as text
+                                "js": "txt",    # JS file treated as text
+                                "ts": "txt",    # TS file treated as text
+                            }
+                            
+                            doc_format = doc_format_map.get(file_ext, "txt")
+                            
+                            message_content.append({
+                                "document": {
+                                    "format": doc_format,
+                                    "name": f"file_{file_idx}",
+                                    "source": {
+                                        "bytes": file_data
+                                    }
+                                }
+                            })
+                        except Exception as e:
+                            logger.error(f"Error processing file data: {e}")
+                    
+                    # Handle file_id (not implemented in this version)
+                    elif file_obj.file_id:
+                        logger.warning(f"File ID references not implemented yet: {file_obj.file_id}")
+        
+        messages.append({
+            "role": msg.role,
+            "content": message_content
+        })
 
     # bedrock's first turn cannot be assistant
     if messages and messages[0]['role'] == 'assistant':
@@ -762,7 +1001,7 @@ async def chat_completions(
 
     system = []
     if messages and messages[0]['role'] == 'system':
-        system = [{"text":messages[0]['content'][0]["text"]}] if messages[0]['content'][0]["text"] else []
+        system = messages[0]['content'] if messages[0]['content'] else []
         messages = messages[1:]
 
     try:
