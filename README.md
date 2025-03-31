@@ -272,9 +272,9 @@ read the content of rows.txt file
 ### 5.2 使用MCP Computer Use 操作 EC2 remote desktop
 - 在另外一个目录中安装下载remote-computer-use
 ```bash
-git clone https://github.com/aws-samples/mcp-servers-for-bedrock-samples.git
+git clone https://github.com/aws-samples/aws-mcp-servers-samples.git
 ```
-- 需要提前安装一台EC2实例，并配置VNC远程桌面。安装步骤请参考[说明](https://github.com/aws-samples/mcp-servers-for-bedrock-samples/blob/main/remote_computer_use/README.md)
+- 需要提前安装一台EC2实例，并配置VNC远程桌面。安装步骤请参考[说明](https://github.com/aws-samples/aws-mcp-servers-samples/blob/main/remote_computer_use/README.md)
 - 环境配置好之后，在MCP demo客户端配置如下：
 ```json
 {
@@ -364,7 +364,7 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 ```
 
 ## 6. Awsome MCPs
-- AWS MCP Servers for Bedrock Samples https://github.com/aws-samples/mcp-servers-for-bedrock-samples
+- AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples
 - https://github.com/punkpeye/awesome-mcp-servers
 - https://github.com/modelcontextprotocol/servers
 - https://www.aimcp.info/en

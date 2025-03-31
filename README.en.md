@@ -258,9 +258,9 @@ Input task: `I want a comprehensive analysis of Tesla stock, including: Overview
 ### 5.2 Using MCP Computer Use to Operate EC2 Remote Desktop
 - In another directory, install and download remote-computer-use:
 ```bash
-git clone https://github.com/aws-samples/mcp-servers-for-bedrock-samples.git
+git clone https://github.com/aws-samples/aws-mcp-servers-samples.git
 ```
-- You need to set up an EC2 instance with VNC remote desktop configured in advance. For installation steps, please refer to [instructions](https://github.com/aws-samples/mcp-servers-for-bedrock-samples/blob/main/remote_computer_use/README.md)
+- You need to set up an EC2 instance with VNC remote desktop configured in advance. For installation steps, please refer to [instructions](https://github.com/aws-samples/aws-mcp-servers-samples/blob/main/remote_computer_use/README.md)
 - After setting up the environment, configure the MCP demo client as follows:
 ```json
 {
@@ -378,6 +378,7 @@ Then add this JSON file in the chatbot interface, making sure to replace the fie
 ```
 
 ## 6. Awesome MCPs
+- AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples
 - https://github.com/punkpeye/awesome-mcp-servers
 - https://github.com/modelcontextprotocol/servers
 - https://www.aimcp.info/en
@@ -385,5 +386,6 @@ Then add this JSON file in the chatbot interface, making sure to replace the fie
 - https://github.com/xiehust/sample-mcp-servers
 - https://mcp.composio.dev/
 - https://smithery.ai/
+- https://mcp.so/
 
 ## 9. [LICENSE](./LICENSE)
