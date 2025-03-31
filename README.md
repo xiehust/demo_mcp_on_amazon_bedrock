@@ -363,8 +363,8 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 }
 ```
 
-
 ## 6. Awsome MCPs
+- AWS MCP Servers for Bedrock Samples https://github.com/aws-samples/mcp-servers-for-bedrock-samples
 - https://github.com/punkpeye/awesome-mcp-servers
 - https://github.com/modelcontextprotocol/servers
 - https://www.aimcp.info/en
@@ -372,5 +372,6 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 - https://github.com/xiehust/sample-mcp-servers
 - https://mcp.composio.dev/
 - https://smithery.ai/
+- https://mcp.so/
 
 ## 9. [LICENSE](./LICENSE)
