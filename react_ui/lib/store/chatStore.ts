@@ -106,7 +106,7 @@ export const useChatStore = create<ChatState>()(
       generateRandomUserId: () => {
         const newId = Math.random().toString(36).substring(2, 10);
         set({ userId: newId });
-        // Also update in localStorage
+        // Ensure we always store a plain string, not a JSON object
         localStorage.setItem('mcp_chat_user_id', newId);
       },
       
