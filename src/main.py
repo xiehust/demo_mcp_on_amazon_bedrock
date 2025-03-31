@@ -89,7 +89,18 @@ def save_global_server_config( server_id: str, config: dict):
     global_mcp_server_configs[server_id] = config
     # 在实际应用中，这里应该将配置持久化到数据库或文件系统
     logger.info(f"保存Global服务器配置 {server_id}")
-    
+
+# 删除用户MCP服务器配置 
+def delete_user_server_config(user_id: str, server_id: str):
+    """删除用户的MCP服务器配置"""
+    global user_mcp_server_configs
+    with session_lock:
+        if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
+            del user_mcp_server_configs[user_id][server_id]
+            # 在实际应用中，这里应该从数据库或文件系统删除配置
+            logger.info(f"为用户 {user_id} 删除服务器配置 {server_id}")
+
+
 # 保存用户MCP服务器配置
 def save_user_server_config(user_id: str, server_id: str, config: dict):
     """保存用户的MCP服务器配置"""
@@ -519,34 +530,39 @@ async def remove_mcp_server(
     user_id = session.user_id
     
     # 使用会话锁确保操作是线程安全的
-    async with session.lock:
-        if server_id not in session.mcp_clients:
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=-1,
-                msg="MCP server not found for this user!"
-            ).model_dump())
-            
-        try:
+    # async with session.lock:
+    if server_id not in session.mcp_clients:
+        return JSONResponse(content=AddMCPServerResponse(
+            errno=-1,
+            msg="MCP server not found for this user!"
+        ).model_dump())
+        
+    try:
+        async with session.lock:
             # 清理资源
             await session.mcp_clients[server_id].cleanup()
             # 移除服务器
             del session.mcp_clients[server_id]
-            
+
             # 从用户配置中删除
-            if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
-                del user_mcp_server_configs[user_id][server_id]
+            delete_user_server_config(user_id, server_id)
+            #save conf
+            await save_user_mcp_configs()
+        # if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
+        #     del user_mcp_server_configs[user_id][server_id]
             
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=0,
-                msg="Server removed successfully"
-            ).model_dump())
-            
-        except Exception as e:
-            logger.error(f"User {user_id} remove MCP server {server_id} error: {e}")
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=-1,
-                msg=f"Failed to remove server: {str(e)}"
-            ).model_dump())
+        
+        return JSONResponse(content=AddMCPServerResponse(
+            errno=0,
+            msg="Server removed successfully"
+        ).model_dump())
+        
+    except Exception as e:
+        logger.error(f"User {user_id} remove MCP server {server_id} error: {e}")
+        return JSONResponse(content=AddMCPServerResponse(
+            errno=-1,
+            msg=f"Failed to remove server: {str(e)}"
+        ).model_dump())
 
 # 活跃流式请求的字典，用于跟踪可以停止的请求
 active_streams = {}
