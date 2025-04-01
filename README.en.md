@@ -57,7 +57,6 @@
    - Supports both Amazon Nova Pro and Claude Sonnet models
    - Fully compatible with Anthropic's official MCP standard, allowing direct use of various [MCP servers](https://github.com/modelcontextprotocol/servers/tree/main) from the community
    - Decouples MCP capabilities from the client, encapsulating MCP functionality on the server side and providing API services with OpenAI-compatible chat interfaces for easy integration with other chat clients
-    ![alt text](./assets/image_api.png)
    - Frontend-backend separation, with MCP Client and MCP Server deployable on the server side, allowing users to interact directly through a web browser via the backend web service to access LLM and MCP Server capabilities and resources
    - Supports multiple users with session isolation and concurrent access
    - Streaming responses

@@ -56,7 +56,6 @@
    - 同时支持Amazon Nova Pro和Claude Sonnet模型
    - 与Anthropic官方MCP标准完全兼容，可以采用同样的方式，直接使用社区的各种[MCP servers](https://github.com/modelcontextprotocol/servers/tree/main)
    - 将MCP能力和客户端的解耦，MCP能力封装在服务端，对外提供API服务，且chat接口兼容openai，方便接入其他chat客户端
-    ![alt text](./assets/image_api.png)
    - 前后端分离，MCP Client和MCP Server均可以部署到服务器端，用户可以直接使用web浏览器通过后端web服务交互，从而访问LLM和MCP Sever能力和资源  
    - 支持多用户，用户session隔离，支持并发访问。
    - 流式响应
