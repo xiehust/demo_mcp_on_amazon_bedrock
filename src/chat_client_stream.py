@@ -221,7 +221,11 @@ class ChatClientStream(ChatClient):
                 # 收集所有需要调用的工具请求
                 tool_calls = []
                 async for event in self._process_stream_response(response):
-                    logger.info(event)
+                    # logger.info(event)
+                    if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
+                        logger.info(f"Stream {stream_id} was requested to stop")
+                        yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                        break
                     # continue
                     yield event
                     # Handle tool use in content block start
