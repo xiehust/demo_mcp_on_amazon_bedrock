@@ -1,4 +1,6 @@
 # MCP on Amazon Bedrock
+- Demo Vides
+![alt text](assets/demo_videos.png)
 
 > ChatBot is the most common application form in the era of large language models, but it is limited by the model's inability to access real-time information or operate external systems, which restricts its application scenarios. With the introduction of Function Calling/Tool Use capabilities, large models can now interact with external systems, but the drawback is that the business logic and tool development are tightly coupled, preventing efficient scaling on the tool side. In late November 2024, Anthropic introduced [MCP](https://www.anthropic.com/news/model-context-protocol), breaking this limitation by leveraging the entire community's power to scale up on the tool side. Currently, the open-source community and various vendors have developed rich [MCP servers](https://github.com/modelcontextprotocol/servers), enabling the tool ecosystem to flourish. End users can integrate these tools into their ChatBots with plug-and-play simplicity, greatly extending ChatBot UI capabilities, trending toward ChatBots unifying various system interfaces.
 
