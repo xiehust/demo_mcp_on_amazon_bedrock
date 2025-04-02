@@ -1,0 +1,3 @@
+[submodule "amazon-bedrock-agent-samples"]
+	path = amazon-bedrock-agent-samples
+	url = https://github.com/awslabs/amazon-bedrock-agent-samples.git
