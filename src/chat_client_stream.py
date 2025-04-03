@@ -169,8 +169,9 @@ class ChatClientStream(ChatClient):
                 requestParams['toolConfig'] = {"tools":requestParams['toolConfig']['tools'] + [{"cachePoint": {"type": "default"}}]}
                 cache_checkpoint += 1
             # Skip cache for system because it usually short.
-            # requestParams['system'] = requestParams['system']+[{"cachePoint": {"type": "default"}}]
-            # cache_checkpoint += 1
+            if len(system) > 0 and len(system[0]['text']) >= 5000:
+                requestParams['system'] = requestParams['system']+[{"cachePoint": {"type": "default"}}]
+                cache_checkpoint += 1
         # Register this stream if an ID is provided
         if stream_id:
             self.register_stream(stream_id)
