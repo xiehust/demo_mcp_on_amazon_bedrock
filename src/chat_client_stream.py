@@ -232,11 +232,16 @@ class ChatClientStream(ChatClient):
                 # 收集所有需要调用的工具请求
                 tool_calls = []
                 async for event in self._process_stream_response(response):
+                    if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
+                        logger.info(f"Stream {stream_id} was requested to stop")
+                        yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                        break
+                    
                     if event['type'] == 'metadata':
                         tokens_need_cache += event['data']['usage']['inputTokens'] + event['data']['usage']['outputTokens']
                         logger.info(event)
                         logger.info(f"Tokens need cache: {tokens_need_cache}")
-                    # continue
+                        
                     yield event
                     # Handle tool use in content block start
                     if event["type"] == "block_start":
