@@ -21,7 +21,7 @@ import time
 load_dotenv()  # load environment variables from .env
 logger = logging.getLogger(__name__)
 CLAUDE_37_SONNET_MODEL_ID = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0'
-
+CLAUDE_35_HAIKU_MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0'
 
 class ChatClientStream(ChatClient):
     """Extended ChatClient with streaming support"""
@@ -115,6 +115,8 @@ class ChatClientStream(ChatClient):
         
         Similar to process_query but uses converse_stream API for streaming responses.
         """
+        prompt_cache = True if model_id in [CLAUDE_37_SONNET_MODEL_ID,CLAUDE_35_HAIKU_MODEL_ID] else False
+        cache_window = 2048 if model_id == CLAUDE_35_HAIKU_MODEL_ID else 1024
         if query:
             history.append({
                     "role": "user",
@@ -161,11 +163,20 @@ class ChatClientStream(ChatClient):
                     additionalModelRequestFields = additionalModelRequestFields
         )
         requestParams = {**requestParams, 'toolConfig': tool_config} if tool_config['tools'] else requestParams
-
+        cache_checkpoint = 0
+        if prompt_cache:
+            if 'toolConfig' in requestParams:
+                requestParams['toolConfig'] = {"tools":requestParams['toolConfig']['tools'] + [{"cachePoint": {"type": "default"}}]}
+                cache_checkpoint += 1
+            # Skip cache for system because it usually short.
+            # requestParams['system'] = requestParams['system']+[{"cachePoint": {"type": "default"}}]
+            # cache_checkpoint += 1
         # Register this stream if an ID is provided
         if stream_id:
             self.register_stream(stream_id)
-            
+        
+        tokens_need_cache = 0
+        
         while turn_i <= max_turns and stop_reason != 'end_turn':
             # Check if we need to stop
             if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
@@ -221,7 +232,10 @@ class ChatClientStream(ChatClient):
                 # 收集所有需要调用的工具请求
                 tool_calls = []
                 async for event in self._process_stream_response(response):
-                    logger.info(event)
+                    if event['type'] == 'metadata':
+                        tokens_need_cache += event['data']['usage']['inputTokens'] + event['data']['usage']['outputTokens']
+                        logger.info(event)
+                        logger.info(f"Tokens need cache: {tokens_need_cache}")
                     # continue
                     yield event
                     # Handle tool use in content block start
@@ -329,6 +343,11 @@ class ChatClientStream(ChatClient):
                                 "role": "user",
                                 "content": tool_results_content
                             }
+                            if prompt_cache and tokens_need_cache >= cache_window and cache_checkpoint < 4:
+                                tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
+                                cache_checkpoint += 1
+                                logger.info(f"Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
+                                tokens_need_cache = 0
                             # output tool results
                             event["data"]["tool_results"] = [item for pair in zip(tool_calls, tool_results_serializable) for item in pair]
                             logger.info('yield event*****')
@@ -362,6 +381,8 @@ class ChatClientStream(ChatClient):
                             thinking_signature = ''
                             thinking_text = ''
                             messages.append(assistant_message)
+
+                                
 
                             #append tooluse result
                             messages.append(tool_result_message)
