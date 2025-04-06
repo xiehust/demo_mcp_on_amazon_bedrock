@@ -95,7 +95,7 @@ def save_global_server_config( server_id: str, config: dict):
     logger.info(f"保存Global服务器配置 {server_id}")
 
 # 删除用户MCP服务器配置 
-def delete_user_server_config(user_id: str, server_id: str):
+async def delete_user_server_config(user_id: str, server_id: str):
     """删除用户的MCP服务器配置"""
     global user_mcp_server_configs
     with session_lock:
@@ -106,7 +106,7 @@ def delete_user_server_config(user_id: str, server_id: str):
 
 
 # 保存用户MCP服务器配置
-def save_user_server_config(user_id: str, server_id: str, config: dict):
+async def save_user_server_config(user_id: str, server_id: str, config: dict):
     """保存用户的MCP服务器配置"""
     global user_mcp_server_configs
     with session_lock:
@@ -185,7 +185,7 @@ async def initialize_user_servers(session: UserSession):
             # 添加到用户的客户端列表
             session.mcp_clients[server_id] = mcp_client
             
-            save_user_server_config(user_id, server_id, config)
+            await save_user_server_config(user_id, server_id, config)
 
             await save_user_mcp_configs()
             logger.info(f"User Id {session.user_id} initialize server {server_id}")
@@ -531,7 +531,7 @@ async def add_mcp_server(
                 "env": server_script_envs,
                 "description": server_desc
             }
-            save_user_server_config(user_id, server_id, server_config)
+            await save_user_server_config(user_id, server_id, server_config)
             
             #save conf
             await save_user_mcp_configs()
@@ -562,9 +562,6 @@ async def add_mcp_server(
                 msg=f"MCP server connect failed: {str(e)}"
             ).model_dump())
 
-        # 客户端已在成功连接后添加到用户会话
-        # 更新全局服务器列表描述
-        shared_mcp_server_list[server_id] = server_desc
         await save_user_mcp_configs()
         return JSONResponse(content=AddMCPServerResponse(
             errno=0,
@@ -592,18 +589,19 @@ async def remove_mcp_server(
         ).model_dump())
         
     try:
-        async with session.lock:
-            # 清理资源
-            await session.mcp_clients[server_id].cleanup()
-            # 移除服务器
-            del session.mcp_clients[server_id]
+        # async with session.lock:
+        # 清理资源
+        await session.mcp_clients[server_id].disconnect_to_server()
+        # 移除服务器
+        del session.mcp_clients[server_id]
 
-            # 从用户配置中删除
-            delete_user_server_config(user_id, server_id)
-            #save conf
-            await save_user_mcp_configs()
+        # 从用户配置中删除
+        await delete_user_server_config(user_id, server_id)
+        #save conf
+        await save_user_mcp_configs()
         # if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
         #     del user_mcp_server_configs[user_id][server_id]
+        logger.info(f"User {user_id} removed MCP server {server_id}")
             
         
         return JSONResponse(content=AddMCPServerResponse(

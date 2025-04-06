@@ -69,6 +69,7 @@ class MCPClient:
         return server_id, tool_name
 
     async def disconnect_to_server(self):
+        logger.info(f"\nDisconnecting to server [{self.name}]")
         await self.cleanup()
         # if server_id in self.sessions:
         #     del self.sessions[server_id]
