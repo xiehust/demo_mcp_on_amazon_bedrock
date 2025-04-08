@@ -743,6 +743,7 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
         current_content = ""
         thinking_start = False
         thinking_text_index = 0
+        tooluse_start = False
         
         # 使用用户特定的chat_client和mcp_clients
         async for response in session.chat_client.process_query_stream(
@@ -785,6 +786,15 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
                     event_data["choices"][0]["delta"] = {"content": text}
                     thinking_text_index = 0
                     
+                if "toolUse" in response["data"]["delta"]:
+                    text = ""
+                    if not tooluse_start:    
+                        tooluse_start = True
+                        text = "<tool_input>"
+                    text += response["data"]["delta"]["toolUse"]['input']
+                    current_content += text
+                    event_data["choices"][0]["delta"] = {"content": text}
+                    
                 if "reasoningContent" in response["data"]["delta"]:
                     if 'text' in response["data"]["delta"]["reasoningContent"]:
                         if not thinking_start:
@@ -794,6 +804,13 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
                             text = response["data"]["delta"]["reasoningContent"]["text"]
                         event_data["choices"][0]["delta"] = {"content": text}
                         thinking_text_index += 1
+
+            elif response["type"] == "block_stop":
+                if tooluse_start:
+                    text =  "</tool_input>"
+                    current_content += text
+                    tooluse_start = False
+                    event_data["choices"][0]["delta"] = {"content": text}
                     
             elif response["type"] == "message_stop":
                 event_data["choices"][0]["finish_reason"] = response["data"]["stopReason"]
