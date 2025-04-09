@@ -412,30 +412,37 @@ export async function sendChatRequest({
   };
   
   try {
-    if (stream) {
-      // For streaming responses, use our dedicated streaming endpoint
-      const streamUrl = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions-stream`;
-      
-      const headers = {
-        ...getAuthHeaders(userId),
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream'
-      };
-      
-      const response = await fetch(streamUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      
-      // Generate a unique stream ID if not provided in the response
-      const streamId = `stream_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      
-      return { response, messageExtras: {}, streamId };
+      if (stream) {
+        // For streaming responses, use our dedicated streaming endpoint
+        const streamUrl = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions-stream`;
+        
+        const headers = {
+          ...getAuthHeaders(userId),
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream'
+        };
+        
+        const response = await fetch(streamUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        // Get the stream ID from the response headers (provided by backend)
+        // Fall back to a generated ID if the header isn't present
+        let streamId = response.headers.get('X-Stream-ID');
+        if (!streamId) {
+          console.warn('X-Stream-ID header not found in response, generating local ID');
+          streamId = `stream_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        } else {
+          console.log('Using server-provided stream ID:', streamId);
+        }
+        
+        return { response, messageExtras: {}, streamId };
     } else {
       // For non-streaming responses, use the standard endpoint
       const url = `${baseUrl.replace(/\/$/, '')}/v1/chat/completions`;

@@ -140,6 +140,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no'); // Prevent Nginx buffering
+    
+    // Forward X-Stream-ID if present in the backend response
+    const streamId = fetchResponse.headers.get('X-Stream-ID');
+    if (streamId) {
+      console.log('Forwarding stream ID from backend:', streamId);
+      res.setHeader('X-Stream-ID', streamId);
+    }
+    
     res.status(200);
     
     // Use Node.js native streams for reliable forwarding
