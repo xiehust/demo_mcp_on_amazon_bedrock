@@ -91,6 +91,14 @@ uv sync
 source .venv/bin/activate
 ```
 
+- （可选）使用aws cli工具创建一个dynamodb table用于保存user config信息，如果不创建dynamodb，则直接生成user_mcp_config.json保存在conf/目录下
+```bash
+aws dynamodb create-table \
+    --table-name mcp_user_config_table \
+    --attribute-definitions AttributeName=userId,AttributeType=S \
+    --key-schema AttributeName=userId,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST 
+```
 ### 2.4 配置编辑
 > Tips: 如何需要配置多个账号ak/sk, 使用轮询机制，可以在conf/目录下增加一个`credential.csv`, 列名分别为**ak**，**sk**， 填入多个ak/sk即可，例如: 
   
@@ -110,6 +118,7 @@ MCP_SERVICE_HOST=127.0.0.1
 MCP_SERVICE_PORT=<bedrock-mcp-service-port>
 API_KEY=<your-new-api-key>
 MAX_TURNS=100
+ddb_table=mcp_user_config_table<如果不使用dynamodb，则删除此行>
 ```
 
 备注：该项目用到 **AWS Bedrock Nova/Claude** 系列模型，因此需要注册并获取以上服务访问密钥。
