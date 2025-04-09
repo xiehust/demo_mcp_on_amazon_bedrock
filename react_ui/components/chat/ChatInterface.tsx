@@ -201,7 +201,7 @@ export default function ChatInterface() {
             </div>
           )}
           {!isSidebarCollapsed && (
-            <Tabs defaultValue="toolInput" className="h-full">
+            <Tabs defaultValue="toolUsage" className="h-full">
             <TabsList className="grid grid-cols-1 w-full sticky top-0 z-10 bg-white dark:bg-gray-900">
               {/* <TabsTrigger value="toolInput">Tool Input</TabsTrigger> */}
               <TabsTrigger value="toolUsage" className='text-lg'>Tool Usage</TabsTrigger>

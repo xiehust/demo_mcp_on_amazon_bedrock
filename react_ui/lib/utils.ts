@@ -31,7 +31,7 @@ export function extractToolInput(content: string): { toolInput: string | null; c
   
   if (match) {
     const toolInput = match[1];
-    // Remove the thinking tags and content from the main content
+    // Remove the tool input tags and content from the main content
     const cleanContent = content.replace(toolInputRegex, '').trim();
     return { toolInput, cleanContent };
   }
