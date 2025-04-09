@@ -130,7 +130,8 @@ export function processStreamResponse(
   onToolUse: (toolUse: string) => void,
   onThinking: (thinking: string) => void,
   onError: (error: string) => void,
-  onDone?: () => void
+  onDone?: () => void,
+  onToolInput?: (toolInput: string) => void
 ) {
   const reader = response.body?.getReader();
   const decoder = new TextDecoder();
@@ -199,9 +200,20 @@ export function processStreamResponse(
         onThinking(thinkingMatch[1]);
       }
       
+      // Extract tool_input content if present
+      const toolInputMatch = content.match(/<tool_input>(.*?)<\/tool_input>/s);
+      if (toolInputMatch && onToolInput) {
+        onToolInput(toolInputMatch[1]);
+      }
+      
       // Check if message_extras contains thinking
       if (messageExtras && messageExtras.thinking) {
         onThinking(messageExtras.thinking);
+      }
+      
+      // Check if message_extras contains tool_input
+      if (messageExtras && messageExtras.tool_input && onToolInput) {
+        onToolInput(messageExtras.tool_input);
       }
       
     } catch (e) {

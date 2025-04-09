@@ -148,7 +148,7 @@ export default function Sidebar({ onClose }: SidebarProps) {
                 id="system-prompt"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
-                className="w-full h-24 px-3 py-2 text-sm rounded-md border border-input bg-background"
+                className="w-full h-36 px-3 py-2 text-sm rounded-md border border-input bg-background"
                 placeholder="You are a helpful assistant..."
               />
             </div>

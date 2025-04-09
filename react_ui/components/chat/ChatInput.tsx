@@ -4,7 +4,7 @@ import { useState, FormEvent, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useStore, Message } from '@/lib/store';
 import { sendChatRequest, processStreamResponse, stopStream } from '@/lib/api/chat';
-import { extractThinking, extractToolUse } from '@/lib/utils';
+import { extractThinking, extractToolUse, extractToolInput} from '@/lib/utils';
 import { FileUpload, FileItem } from './FileUpload';
 import { Paperclip } from 'lucide-react';
 
@@ -171,6 +171,7 @@ export function ChatInput() {
           let fullResponse = '';
           let fullThinking = '';
           let toolUseData: any[] = [];
+          let fullToolInput = '';
           
           // Set streaming state and save stream ID
           setIsStreaming(true);
@@ -190,10 +191,20 @@ export function ChatInput() {
               const { thinking, cleanContent: contentAfterThinking } = extractThinking(fullResponse);
               fullResponse = contentAfterThinking;
               fullThinking += thinking??"";
-              // Update message with content and thinking if available
+              
+              // Extract tool_input from content
+              const { toolInput, cleanContent } = extractToolInput(fullResponse);
+              fullResponse = cleanContent;
+              if (toolInput) {
+                fullToolInput += toolInput + "\n";
+              }
+              
+              // Update message with content, thinking, and tool_input if available
               updateLastMessage(
-                contentAfterThinking || '', 
-                fullThinking.trim() ? fullThinking : undefined
+                cleanContent || '',
+                fullThinking.trim() ? fullThinking : undefined,
+                undefined,
+                fullToolInput.trim() ? fullToolInput : undefined
               );
             },
             // Tool use handler
@@ -211,10 +222,13 @@ export function ChatInput() {
                 const lastMessageIndex = messages.length - 1;
                 if (lastMessageIndex >= 0 && messages[lastMessageIndex].role === 'assistant') {
                   const currentContent = messages[lastMessageIndex].content;
+                  const currentThinking = messages[lastMessageIndex].thinking;
+                  const currentToolInput = messages[lastMessageIndex].toolInput;
                   updateLastMessage(
-                    currentContent || '', 
-                    undefined, 
-                    [ ...messages[lastMessageIndex].toolUse || [], ...toolUseData]);
+                    currentContent || '',
+                    currentThinking,
+                    [ ...messages[lastMessageIndex].toolUse || [], ...toolUseData],
+                    currentToolInput);
                 }
                   // console.log("messages:", messages);
                 }
@@ -229,16 +243,18 @@ export function ChatInput() {
                   const lastMessageIndex = messages.length - 1;
                   if (lastMessageIndex >= 0 && messages[lastMessageIndex].role === 'assistant') {
                     const currentContent = messages[lastMessageIndex].content;
-                    updateLastMessage(currentContent, thinking);
+                    const currentToolUse = messages[lastMessageIndex].toolUse;
+                    const currentToolInput = messages[lastMessageIndex].toolInput;
+                    updateLastMessage(currentContent, thinking, currentToolUse, currentToolInput);
                   }
                 }
               },
             // Error handler
             (error) => {
               console.error('Stream error:', error);
-              addMessage({ 
-                role: 'assistant', 
-                content: 'An error occurred while processing your request.' 
+              addMessage({
+                role: 'assistant',
+                content: 'An error occurred while processing your request.'
               });
               setIsStreaming(false);
               setCurrentStreamId(null);
@@ -249,6 +265,25 @@ export function ChatInput() {
               setIsStreaming(false);
               setCurrentStreamId(null);
               abortControllerRef.current = null;
+            },
+            // Tool input handler - directly sent from server
+            (toolInput) => {
+              if (toolInput && toolInput.trim()) {
+                fullToolInput += toolInput;
+                const { messages } = useStore.getState();
+                const lastMessageIndex = messages.length - 1;
+                if (lastMessageIndex >= 0 && messages[lastMessageIndex].role === 'assistant') {
+                  const currentContent = messages[lastMessageIndex].content;
+                  const currentThinking = messages[lastMessageIndex].thinking;
+                  const currentToolUse = messages[lastMessageIndex].toolUse;
+                  updateLastMessage(
+                    currentContent,
+                    currentThinking,
+                    currentToolUse,
+                    fullToolInput.trim()
+                  );
+                }
+              }
             }
           );
           
@@ -267,12 +302,15 @@ export function ChatInput() {
           temperature,
           extraParams
         });
-        
         // Extract thinking from message
         const { thinking, cleanContent: contentAfterThinking } = extractThinking(message);
         
         // Extract tool use from content
-        const { toolUse: extractedToolUse, cleanContent } = extractToolUse(contentAfterThinking);
+        const { toolUse: extractedToolUse, cleanContent: contentAfterToolUse } = extractToolUse(contentAfterThinking);
+        
+        // Extract tool input from content
+        const { toolInput, cleanContent } = extractToolInput(contentAfterToolUse);
+        
         
         // Combine extracted tool use with any from messageExtras
         let toolUseData = extractedToolUse ? 
@@ -291,12 +329,13 @@ export function ChatInput() {
           }
         }
         
-        // Add assistant message with tool use data if available
-        addMessage({ 
-          role: 'assistant', 
+        // Add assistant message with tool use data and tool input if available
+        addMessage({
+          role: 'assistant',
           content: cleanContent,
           thinking: thinking || undefined,
-          toolUse: toolUseData
+          toolUse: toolUseData,
+          toolInput: toolInput || undefined
         });
       }
     } catch (error) {

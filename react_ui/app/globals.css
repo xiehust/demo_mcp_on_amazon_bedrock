@@ -171,3 +171,19 @@ code {
 .tool-result {
   @apply border border-secondary/50 rounded-md p-3 my-2 bg-secondary/20;
 }
+
+/* Resizing cursor */
+body.resizing {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+body.resizing * {
+  cursor: col-resize !important;
+  pointer-events: none;
+}
+
+/* Allow pointer events on the resize handle even when resizing */
+.resize-handle {
+  pointer-events: auto !important;
+}

@@ -23,6 +23,23 @@ export function extractThinking(content: string): { thinking: string | null; cle
 }
 
 /**
+ * Extract tool input content from message and return cleaned content
+ */
+export function extractToolInput(content: string): { toolInput: string | null; cleanContent: string } {
+  const toolInputRegex = /<tool_input>(.*?)<\/tool_input>/s;
+  const match = content.match(toolInputRegex);
+  
+  if (match) {
+    const toolInput = match[1];
+    // Remove the thinking tags and content from the main content
+    const cleanContent = content.replace(toolInputRegex, '').trim();
+    return { toolInput, cleanContent };
+  }
+  
+  return { toolInput: null, cleanContent: content };
+}
+
+/**
  * Extract tool use information from message
  */
 export function extractToolUse(content: string): { toolUse: any | null; cleanContent: string } {
