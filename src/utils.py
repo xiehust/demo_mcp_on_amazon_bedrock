@@ -42,3 +42,18 @@ def maybe_filter_to_n_most_recent_images(
                         continue
                 new_content.append(content)
             tool_result["content"] = new_content
+            
+def remove_cache_checkpoint(messages: list) -> list:
+    """
+    Remove cachePoint blocks from messages.
+    
+    Args:
+        messages (list): A list of message dictionaries.
+        
+    Returns:
+        list: The modified messages list with cachePoint blocks removed.
+    """
+    for message in messages:
+        if "content" in message and isinstance(message["content"], list):
+            message["content"] = [item for item in message["content"] if "cachePoint" not in item]
+    return messages

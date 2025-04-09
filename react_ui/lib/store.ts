@@ -20,6 +20,7 @@ export type Message = {
   content: string | ContentItem[]
   thinking?: string
   toolUse?: any[]
+  toolInput?: string
 }
 
 export type Model = {
@@ -37,7 +38,7 @@ interface ChatStore {
   // Messages
   messages: Message[]
   addMessage: (message: Message) => void
-  updateLastMessage: (content: string | ContentItem[], thinking?: string, toolUse?: any[]) => void
+  updateLastMessage: (content: string | ContentItem[], thinking?: string, toolUse?: any[], toolInput?: string) => void
   clearMessages: () => void
   
   // Settings
@@ -82,7 +83,7 @@ export const useStore = create<ChatStore>()(
       addMessage: (message) => set((state) => ({ 
         messages: [...state.messages, message] 
       })),
-      updateLastMessage: (content, thinking, toolUse) => set((state) => {
+      updateLastMessage: (content, thinking, toolUse, toolInput) => set((state) => {
         const messages = [...state.messages]
         const lastMessage = messages[messages.length - 1]
         if (lastMessage && lastMessage.role === 'assistant') {
@@ -90,7 +91,8 @@ export const useStore = create<ChatStore>()(
             ...lastMessage,
             content,
             ...(thinking !== undefined && { thinking }),
-            ...(toolUse !== undefined && { toolUse })
+            ...(toolUse !== undefined && { toolUse }),
+            ...(toolInput !== undefined && { toolInput })
           }
         }
         return { messages }

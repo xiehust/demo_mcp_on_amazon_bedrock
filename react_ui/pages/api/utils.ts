@@ -74,13 +74,21 @@ export async function proxyPostRequest(
 
     // For event streams, forward the response directly
     if (contentType && contentType.includes('text/event-stream')) {
-      // Set headers for SSE
-      res.writeHead(200, {
+      // Set headers for SSE and forward X-Stream-ID if present
+      const headers: any = {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no' // Prevent Nginx from buffering the response
-      });
+      };
+      
+      // Forward X-Stream-ID if present in the backend response
+      const streamId = response.headers.get('X-Stream-ID');
+      if (streamId) {
+        headers['X-Stream-ID'] = streamId;
+      }
+      
+      res.writeHead(200, headers);
 
       // Get the response as a readable stream
       const stream = response.body;

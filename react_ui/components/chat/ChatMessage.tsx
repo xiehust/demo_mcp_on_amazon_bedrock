@@ -15,7 +15,6 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const [showThinking, setShowThinking] = useState(false);
-  const [showToolUse, setShowToolUse] = useState(false);
   
   return (
     <div className={cn(
@@ -48,6 +47,25 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           {message.role === 'user' ? 'You' : 'Assistant'}
         </div>
         
+        {/* Thinking Section (if available) */}
+        {message.thinking && (
+          <div className="w-full">
+            <button
+              onClick={() => setShowThinking(!showThinking)}
+              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+            >
+              {showThinking ? '▼' : '►'} Thinking
+            </button>
+            
+            {showThinking && (
+              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 rounded-md text-sm overflow-auto max-h-128">
+                <pre className="whitespace-pre-wrap bg-gray-50 text-blue-600 dark:bg-gray-800 dark:text-blue-600 p-2 rounded">
+                  {message.thinking}
+                </pre>
+              </div>
+            )}
+          </div>
+        )}
         {/* Message Bubble */}
         <div className={cn(
           "rounded-lg px-4 py-3 shadow-sm",
@@ -154,116 +172,7 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           )}
         </div>
         
-        {/* Thinking Section (if available) */}
-        {message.thinking && (
-          <div className="w-full">
-            <button
-              onClick={() => setShowThinking(!showThinking)}
-              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-            >
-              {showThinking ? '▼' : '►'} Thinking
-            </button>
-            
-            {showThinking && (
-              <div className="mt-2 p-3 bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 rounded-md text-sm overflow-auto max-h-64">
-                <pre className="whitespace-pre-wrap text">
-                  {message.thinking}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Tool Use Section (if available) */}
-        {message.toolUse && message.toolUse.length > 0 && (
-          <div className="w-full mt-2">
-            <button
-              onClick={() => setShowToolUse(!showToolUse)}
-              className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 mb-1"
-            >
-              {showToolUse ? '▼' : '►'} Tool Usage
-            </button>
-            
-            {showToolUse && (
-              <div className="space-y-2">
-                {message.toolUse.map((tool, index) => (
-                  <ToolUseDisplay key={index} tool={tool} index={index} />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
-
-function ToolUseDisplay({ tool, index }: { tool: any, index: number }) {
-  const [expanded, setExpanded] = useState(false);
-  // Check if this is a tool call or result
-  const isToolCall = tool.name;
-  const title = isToolCall ? `Tool Call ${Math.floor(index/2) + 1}` : `Tool Result ${Math.floor(index/2) + 1}`;
-  
-  // Handle image display for tool results
-  const images: string[] = [];
-  if (!isToolCall && tool.content) {
-    tool.content.forEach((block: any) => {
-      if (block.image?.source?.base64) {
-        images.push(block.image.source.base64);
-      }
-    });
-  }
-
-  let toolText = structuredClone(tool);
-  if (!isToolCall && toolText.content) {
-    toolText.content.forEach((block: any) => {
-      if (block.image?.source?.base64) {
-         //assign a new key to the image object
-        block.image.source.base64 = "[BASE64 IMAGE DATA - NOT DISPLAYED]";
-      }
-    });
-  }
-  
-  return (
-    <div className="mb-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 px-2 py-1 rounded-md"
-      >
-        {expanded ? '▼' : '►'} {title}
-      </button>
-      
-      {expanded && (
-        <div className="mt-1 p-2 bg-gray-50 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 rounded-md text-sm overflow-auto max-h-64">
-          {/* <pre className="whitespace-pre-wrap">
-            {JSON.stringify(tool, null, 2)}
-          </pre> */}
-          <pre className="whitespace-pre-wrap">
-          <SyntaxHighlighter
-              // @ts-ignore - styles typing issue in react-syntax-highlighter
-              style={oneLight}
-              language={'json'}
-              PreTag="div"
-            >
-               {JSON.stringify(toolText, null, 2)}
-          </SyntaxHighlighter>
-          </pre>
-          {/* Display images if any */}
-          {images.length > 0 && (
-            <div className="mt-2 space-y-2">
-              {images.map((base64, i) => (
-                <div key={i} className="border border-gray-300 dark:border-gray-600 rounded-md overflow-hidden">
-                  <img 
-                    src={`data:image/png;base64,${base64}`} 
-                    alt={`Tool result image ${i}`}
-                    className="max-w-full h-auto"
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from chat_client import ChatClient
 import base64
 from mcp_client import MCPClient
-from utils import maybe_filter_to_n_most_recent_images
+from utils import maybe_filter_to_n_most_recent_images,remove_cache_checkpoint
 from botocore.exceptions import ClientError
 import random
 import time
@@ -22,6 +22,8 @@ load_dotenv()  # load environment variables from .env
 logger = logging.getLogger(__name__)
 CLAUDE_37_SONNET_MODEL_ID = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0'
 CLAUDE_35_HAIKU_MODEL_ID = 'us.anthropic.claude-3-5-haiku-20241022-v1:0'
+NOVA_RPO_MODEL_ID = 'us.amazon.nova-pro-v1:0'
+NOVA_LITE_MODEL_ID = 'us.amazon.nova-lite-v1:0'
 
 class ChatClientStream(ChatClient):
     """Extended ChatClient with streaming support"""
@@ -116,6 +118,7 @@ class ChatClientStream(ChatClient):
         Similar to process_query but uses converse_stream API for streaming responses.
         """
         prompt_cache = True if model_id in [CLAUDE_37_SONNET_MODEL_ID,CLAUDE_35_HAIKU_MODEL_ID] else False
+        prompt_cache_for_tool = True if model_id in [CLAUDE_37_SONNET_MODEL_ID,CLAUDE_35_HAIKU_MODEL_ID] else False
         cache_window = 2048 if model_id == CLAUDE_35_HAIKU_MODEL_ID else 1024
         if query:
             history.append({
@@ -149,7 +152,7 @@ class ChatClientStream(ChatClient):
 
         if enable_thinking:
             additionalModelRequestFields = {"reasoning_config": { "type": "enabled","budget_tokens": extra_params.get("budget_tokens",1024)}}
-            inferenceConfig={"maxTokens":max(extra_params.get("budget_tokens",1024) + 1, max_tokens),"temperature":1,}
+            inferenceConfig={"maxTokens":max(extra_params.get("budget_tokens",1024) + 2048, max_tokens),"temperature":1,}
 
         else:
             additionalModelRequestFields = {}
@@ -165,13 +168,20 @@ class ChatClientStream(ChatClient):
         requestParams = {**requestParams, 'toolConfig': tool_config} if tool_config['tools'] else requestParams
         cache_checkpoint = 0
         if prompt_cache:
-            if 'toolConfig' in requestParams:
-                requestParams['toolConfig'] = {"tools":requestParams['toolConfig']['tools'] + [{"cachePoint": {"type": "default"}}]}
-                cache_checkpoint += 1
+            if 'toolConfig' in requestParams and prompt_cache_for_tool:
+                tools_str = json.dumps(requestParams['toolConfig']['tools'],ensure_ascii=False)
+                if len(tools_str) >= 5000:##will replace by token count in future
+                    requestParams['toolConfig'] = {"tools":requestParams['toolConfig']['tools'] + [{"cachePoint": {"type": "default"}}]}
+                    cache_checkpoint += 1
+                    logger.info(f"add checkpoint number:{cache_checkpoint} for tool config")
             # Skip cache for system because it usually short.
-            if len(system) > 0 and len(system[0]['text']) >= 5000:
+            if len(system) > 0 and len(system[0]['text']) >= 5000: ##will replace by token count in future
                 requestParams['system'] = requestParams['system']+[{"cachePoint": {"type": "default"}}]
                 cache_checkpoint += 1
+                logger.info(f"add checkpoint number:{cache_checkpoint} for system prompt")
+        
+        # Save the initial checkpoint num for reset 
+        reset_checkpoint = cache_checkpoint
         # Register this stream if an ID is provided
         if stream_id:
             self.register_stream(stream_id)
@@ -233,6 +243,7 @@ class ChatClientStream(ChatClient):
                 # 收集所有需要调用的工具请求
                 tool_calls = []
                 async for event in self._process_stream_response(response):
+                    # logger.info(event)
                     if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
                         logger.info(f"Stream {stream_id} was requested to stop")
                         yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
@@ -349,11 +360,19 @@ class ChatClientStream(ChatClient):
                                 "role": "user",
                                 "content": tool_results_content
                             }
-                            if prompt_cache and tokens_need_cache >= cache_window and cache_checkpoint < 4:
-                                tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
-                                cache_checkpoint += 1
-                                logger.info(f"Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
-                                tokens_need_cache = 0
+                            if prompt_cache and tokens_need_cache >= cache_window:
+                                if cache_checkpoint < 4:
+                                    tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
+                                    cache_checkpoint += 1
+                                    logger.info(f"Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
+                                    tokens_need_cache = 0
+                                else: # reset checkpoint
+                                    messages = remove_cache_checkpoint(messages)
+                                    tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
+                                    cache_checkpoint = reset_checkpoint + 1
+                                    logger.info(f"Reset prompt cache checkpoint to {reset_checkpoint}, Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
+                                    tokens_need_cache = 0
+                                    
                             # output tool results
                             event["data"]["tool_results"] = [item for pair in zip(tool_calls, tool_results_serializable) for item in pair]
                             logger.info('yield event*****')
