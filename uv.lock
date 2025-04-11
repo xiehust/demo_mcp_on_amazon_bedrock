@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.12"
 
 [[package]]
@@ -386,6 +385,7 @@ dependencies = [
     { name = "streamlit" },
     { name = "streamlit-cookies-controller" },
     { name = "streamlit-local-storage" },
+    { name = "tzdata" },
     { name = "uvicorn" },
 ]
 
@@ -401,6 +401,7 @@ requires-dist = [
     { name = "streamlit", specifier = ">=1.41.1" },
     { name = "streamlit-cookies-controller", specifier = ">=0.0.4" },
     { name = "streamlit-local-storage", specifier = ">=0.0.25" },
+    { name = "tzdata", specifier = ">=2024.2" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
