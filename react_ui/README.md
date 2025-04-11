@@ -71,6 +71,7 @@ cp .env.example .env.local
 ```
 NEXT_PUBLIC_API_KEY=123456
 NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
+NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
 5. 编译前端
