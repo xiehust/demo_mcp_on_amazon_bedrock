@@ -163,6 +163,8 @@ async def get_user_server_configs(user_id: str) -> dict:
             with session_lock:
                 user_mcp_server_configs[user_id] = ddb_config
             return ddb_config
+        else:
+            return {}
     else: 
         # 如果没有设置DynamoDB或无法从DynamoDB获取，从内存中读取
         return user_mcp_server_configs.get(user_id, {})
