@@ -26,6 +26,7 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 import boto3
 from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks, Security
+from utils import save_to_ddb, get_from_ddb, dynamodb_client, scan_all_from_ddb,hash_filename,clean_filename
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -51,122 +52,6 @@ INACTIVE_TIME = int(os.environ.get("INACTIVE_TIME",60*24))  #mins
 DDB_TABLE = os.environ.get("ddb_table")  # DynamoDB表名，用于存储用户配置
 
 API_KEY = os.environ.get("API_KEY")
-
-# DynamoDB 客户端
-dynamodb_client = None
-if DDB_TABLE:
-    try:
-        region = os.environ.get('AWS_REGION', 'us-east-1')
-        dynamodb_client = boto3.resource('dynamodb', region_name=region)
-        logger.info(f"已连接到DynamoDB, 表名: {DDB_TABLE}")
-    except Exception as e:
-        logger.error(f"DynamoDB连接失败: {e}")
-        
-# DynamoDB 操作函数
-async def save_to_ddb(user_id: str, data: dict):
-    """将用户配置保存到DynamoDB"""
-    if not dynamodb_client or not DDB_TABLE:
-        return False
-    
-    try:
-        table = dynamodb_client.Table(DDB_TABLE)
-        response = table.put_item(
-            Item={
-                'userId': user_id,
-                'data': json.dumps(data),
-                'timestamp': datetime.now().isoformat()
-            }
-        )
-        logger.info(f"保存用户 {user_id} 配置到DynamoDB成功")
-        return True
-    except Exception as e:
-        logger.error(f"保存用户 {user_id} 配置到DynamoDB失败: {e}")
-        return False
-
-async def get_from_ddb(user_id: str) -> dict:
-    """从DynamoDB获取用户配置"""
-    if not dynamodb_client or not DDB_TABLE:
-        return {}
-    
-    try:
-        table = dynamodb_client.Table(DDB_TABLE)
-        response = table.get_item(
-            Key={
-                'userId': user_id
-            }
-        )
-        
-        if 'Item' in response:
-            data = json.loads(response['Item'].get('data', '{}'))
-            logger.info(f"从DynamoDB获取用户 {user_id} 配置成功")
-            return data
-        else:
-            logger.info(f"用户 {user_id} 在DynamoDB中无配置")
-            return {}
-    except Exception as e:
-        logger.warning(f"从DynamoDB获取用户 {user_id} 配置失败: {e}")
-        return {}
-        
-async def delete_from_ddb(user_id: str) -> bool:
-    """从DynamoDB删除用户配置"""
-    if not dynamodb_client or not DDB_TABLE:
-        return False
-    
-    try:
-        table = dynamodb_client.Table(DDB_TABLE)
-        response = table.delete_item(
-            Key={
-                'userId': user_id
-            }
-        )
-        logger.info(f"从DynamoDB删除用户 {user_id} 配置成功")
-        return True
-    except Exception as e:
-        logger.error(f"从DynamoDB删除用户 {user_id} 配置失败: {e}")
-        return False
-
-async def scan_all_from_ddb() -> dict:
-    """从DynamoDB扫描所有用户配置，处理分页"""
-    if not dynamodb_client or not DDB_TABLE:
-        return {}
-    
-    try:
-        # 使用scan操作获取所有用户的配置，并处理分页
-        table = dynamodb_client.Table(DDB_TABLE)
-        configs = {}
-        
-        # 初始化扫描参数
-        scan_params = {}
-        done = False
-        start_key = None
-        
-        # 处理分页
-        while not done:
-            if start_key:
-                scan_params['ExclusiveStartKey'] = start_key
-            
-            response = table.scan(**scan_params)
-            items = response.get('Items', [])
-            
-            # 处理当前页的结果
-            for item in items:
-                if 'userId' in item and 'data' in item:
-                    user_id = item['userId']
-                    try:
-                        user_data = json.loads(item['data'])
-                        configs[user_id] = user_data
-                    except json.JSONDecodeError as e:
-                        logger.error(f"解析用户 {user_id} 的DynamoDB数据失败: {e}")
-            
-            # 检查是否有更多页
-            start_key = response.get('LastEvaluatedKey')
-            done = start_key is None
-        
-        logger.info(f"已从DynamoDB扫描到 {len(configs)} 个用户的配置")
-        return configs
-    except Exception as e:
-        logger.error(f"从DynamoDB扫描用户配置失败: {e}")
-        return {}
 
 security = HTTPBearer()
 
@@ -254,7 +139,10 @@ async def save_user_server_config(user_id: str, server_id: str, config: dict):
         user_mcp_server_configs[user_id][server_id] = config
         # 如果配置了DynamoDB，也保存到DDB中
         if DDB_TABLE and dynamodb_client:
-            await save_to_ddb(user_id, user_mcp_server_configs[user_id])
+            #获取原有的记录
+            ddb_config = await get_from_ddb(user_id)
+            ddb_config[server_id] = config
+            await save_to_ddb(user_id, ddb_config)
             logger.info(f"已保存用户 {user_id} 配置到DynamoDB")
         else:
             try:
@@ -402,32 +290,6 @@ async def cleanup_inactive_sessions():
         if inactive_users:
             logger.info(f"已清理 {len(inactive_users)} 个不活跃用户会话")
 
-
-def hash_filename(filepath, algorithm='md5'):
-    """
-    对文件名进行哈希处理，但保留原始扩展名
-    """
-    filename = os.path.basename(filepath)
-    base, ext = os.path.splitext(filename)
-    
-    hash_obj = hashlib.md5(base.encode('utf-8'))
-    hashed_base = hash_obj.hexdigest()
-    
-    return hashed_base + ext
-
-def clean_filename(filename):
-    """清理文件名，只保留允许的字符，并移除连续空格"""
-    # 分离文件名和扩展名
-    name, ext = os.path.splitext(filename)
-    
-    # 只保留允许的字符（字母数字、空格、连字符、圆括号和方括号）
-    cleaned_name = re.sub(r'[^a-zA-Z0-9\s\-\(\)\[\]]', '', name)
-    
-    # 将连续的空格替换为单个空格
-    cleaned_name = re.sub(r'\s+', ' ', cleaned_name)
-    
-    # 返回清理后的文件名加扩展名
-    return cleaned_name + ext
         
 class TextContent(BaseModel):
     type: Literal["text"] = "text"
