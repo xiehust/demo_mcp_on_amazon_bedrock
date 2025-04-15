@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mcpui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-bedrock-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--http-parser=legacy --max-http-header-size=16384
+      - NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-123456}
+      - SERVER_MCP_BASE_URL=${SERVER_MCP_BASE_URL:-http://host.docker.internal:7002}
+      - NEXT_PUBLIC_MCP_BASE_URL=/api
+    volumes:
+      - ./.env.local:/app/.env.local:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mcp-network
+
+networks:
+  mcp-network:
+    driver: bridge

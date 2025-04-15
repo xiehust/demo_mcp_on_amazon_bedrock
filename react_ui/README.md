@@ -24,7 +24,65 @@
 
 ## 快速开始
 
-### 前提条件
+### 使用Docker部署（推荐）
+
+#### 前提条件
+- 安装Docker和Docker Compose：https://docs.docker.com/get-docker/
+- Linux下安装Docker命令：
+```bash
+# 安装Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# 安装Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+```
+
+#### 安装步骤
+
+1. 克隆仓库之后
+```bash
+cd demo_mcp_on_amazon_bedrock/react_ui
+```
+
+2. 创建环境变量文件
+```bash
+cp .env.example .env.local
+```
+
+3. 编辑`.env.local`文件，添加必要的环境变量
+```
+NEXT_PUBLIC_API_KEY=123456
+SERVER_MCP_BASE_URL=http://host.docker.internal:7002
+NEXT_PUBLIC_MCP_BASE_URL=/api
+```
+
+4. 使用Docker Compose构建并启动服务
+```bash
+docker-compose up -d
+```
+
+5. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
+
+- 其他Docker常用命令
+```bash
+# 查看容器日志
+docker logs -f mcp-bedrock-ui
+
+# 重启容器
+docker-compose restart
+
+# 停止容器
+docker-compose down
+
+# 重新构建并启动（代码更新后）
+docker-compose up -d --build
+```
+
+### 使用Node.js直接部署（开发模式）
+
+#### 前提条件
 
 - Node.js 22.x 或更高版本, 安装参考：https://nodejs.org/en/download   
 - Linux下安装命令
@@ -74,27 +132,12 @@ NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
-5. 编译前端
+5. 启动开发模式
 ```bash
-npm run build
+npm run dev
 ```
 
-6. 使用pm2在后台启动前端
-```bash
-pm2 start pm2run.config.js
-```
-
-- 其他参考命令
-```bash
-#重启前端
-pm2 restart all
-#stop前端
-pm2 stop all
-#查看日志
-pm2 logs --lines 100
-```
-
-7. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
+6. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
 
 ## 项目结构
 
@@ -114,6 +157,12 @@ pm2 logs --lines 100
 │   ├── hooks/            # 自定义Hooks
 │   ├── store/            # 状态管理
 │   └── utils/            # 工具函数
+├── pages/                # Pages Router (API路由)
+│   └── api/              # API端点
 ├── public/               # 静态资源
-└── styles/               # 全局样式
+├── styles/               # 全局样式
+├── .dockerignore         # Docker忽略文件
+├── docker-compose.yml    # Docker Compose配置
+├── Dockerfile            # Docker构建文件
+└── pm2run.config.js      # PM2配置文件
 ```
