@@ -77,9 +77,9 @@ export default function AddServerDialog({ onClose }: AddServerDialogProps) {
           const serverConfig = config[configServerId];
           
           // Extract command, args, env
-          if (!serverConfig.command) {
-            throw new Error('Missing "command" in server configuration');
-          }
+          // if (!serverConfig.command) {
+          //   throw new Error('Missing "command" in server configuration');
+          // }
           
           finalServerCommand = serverConfig.command;
           args = serverConfig.args || [];

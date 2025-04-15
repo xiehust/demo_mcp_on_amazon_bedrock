@@ -225,7 +225,8 @@ async def initialize_user_servers(session: UserSession):
             # 创建并连接MCP服务器
             mcp_client = MCPClient(name=f"{session.user_id}_{server_id}")
             await mcp_client.connect_to_server(
-                command=config["command"],
+                command=config.get('command'),
+                server_url=config.get('url'),
                 server_script_args=config.get("args", []),
                 server_script_envs=config.get("env", {})
             )
@@ -327,7 +328,7 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: int = 4000
     temperature: float = 0.5
     top_p: float = 0.9
-    top_k: int = 50
+    top_k: int = 250
     extra_params : Optional[dict] = {}
     stream: Optional[bool] = None
     tools: Optional[List[dict]] = []
@@ -345,7 +346,7 @@ class ChatResponse(BaseModel):
 
 class AddMCPServerRequest(BaseModel):
     server_id: str = ''
-    server_desc: str
+    server_desc: str = ''
     command: Literal["npx", "uvx", "node", "python","docker","uv"] = Field(default='npx')
     args: List[str] = []
     env: Optional[Dict[str, str]] = Field(default_factory=dict) 
@@ -522,8 +523,9 @@ async def add_mcp_server(
                 config_json = config_json["mcpServers"]
                 
             server_id = list(config_json.keys())[0]
-            server_cmd = config_json[server_id]["command"]
-            server_script_args = config_json[server_id]["args"]
+            server_cmd = config_json[server_id].get("command","")
+            server_url = config_json[server_id].get("url","")
+            server_script_args = config_json[server_id].get("args",[])
             server_script_envs = config_json[server_id].get('env',{})
             
         # 连接MCP服务器
@@ -535,6 +537,7 @@ async def add_mcp_server(
             # 添加超时控制
             connect_task = mcp_client.connect_to_server(
                 command=server_cmd,
+                server_url=server_url,
                 server_script_args=server_script_args,
                 server_script_envs=server_script_envs
             )
@@ -547,15 +550,13 @@ async def add_mcp_server(
             
             # 保存用户服务器配置以便将来恢复
             server_config = {
+                "url":server_url,
                 "command": server_cmd,
                 "args": server_script_args,
                 "env": server_script_envs,
                 "description": server_desc
             }
             await save_user_server_config(user_id, server_id, server_config)
-            
-            #save conf
-            # await save_user_mcp_configs()
             
             # 成功连接后才将客户端添加到用户会话
             session.mcp_clients[server_id] = mcp_client
