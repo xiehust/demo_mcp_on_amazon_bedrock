@@ -1,6 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 
 // Base URL for the MCP server backend (internal only)
+// Using localhost works with both direct deployment and Docker with host network mode
 const MCP_BASE_URL = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
 
 // Get standardized headers for backend requests

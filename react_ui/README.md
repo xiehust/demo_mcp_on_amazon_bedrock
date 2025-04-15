@@ -37,6 +37,7 @@ sudo sh get-docker.sh
 # 安装Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
+ln -s /usr/bin/docker-compose  /usr/local/bin/docker-compose
 ```
 
 #### 安装步骤
@@ -51,12 +52,22 @@ cd demo_mcp_on_amazon_bedrock/react_ui
 cp .env.example .env.local
 ```
 
-3. 编辑`.env.local`文件，添加必要的环境变量
+3. 编辑`.env.local`文件，添加必要的环境变量（Docker会自动从该文件加载环境变量）
 ```
+# API Key for authentication
 NEXT_PUBLIC_API_KEY=123456
-SERVER_MCP_BASE_URL=http://host.docker.internal:7002
+
+# Base URL for MCP service - Server side (internal)
+# 由于使用host网络模式，可以直接使用localhost访问宿主机服务
+SERVER_MCP_BASE_URL=http://localhost:7002
+
+# Base URL for MCP service - Client side (now uses Next.js API routes)
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
+
+> **注意**：我们使用Docker的host网络模式（network_mode: "host"），使容器直接共享宿主机的网络栈。
+> 这样容器可以直接使用localhost访问宿主机上运行的服务，简化了配置。
+> 使用host网络模式时，容器的端口会直接映射到宿主机上，无需额外的端口映射。
 
 4. 使用Docker Compose构建并启动服务
 ```bash

@@ -7,25 +7,21 @@ services:
       dockerfile: Dockerfile
     container_name: mcp-bedrock-ui
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # 使用host网络模式，直接共享宿主机网络，可以直接访问localhost
+    network_mode: "host"
+    env_file:
+      - .env.local
     environment:
       - NODE_ENV=production
       - NODE_OPTIONS=--http-parser=legacy --max-http-header-size=16384
+      # 以下环境变量将作为默认值，如果.env.local中有定义则会被覆盖
       - NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-123456}
-      - SERVER_MCP_BASE_URL=${SERVER_MCP_BASE_URL:-http://host.docker.internal:7002}
+      # 使用host网络模式时，可以直接使用localhost访问宿主机服务
+      - SERVER_MCP_BASE_URL=${SERVER_MCP_BASE_URL:-http://localhost:7002}
       - NEXT_PUBLIC_MCP_BASE_URL=/api
-    volumes:
-      - ./.env.local:/app/.env.local:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-    networks:
-      - mcp-network
-
-networks:
-  mcp-network:
-    driver: bridge
