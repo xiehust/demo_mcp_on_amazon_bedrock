@@ -16,6 +16,7 @@ from mcp.client.stdio import stdio_client, get_default_environment
 from mcp.types import Resource, Tool, TextContent, ImageContent, EmbeddedResource,CallToolResult,NotificationParams
 from mcp.shared.exceptions import McpError
 from dotenv import load_dotenv
+from mcp.client.sse import sse_client
 
 load_dotenv()  # load environment variables from .env
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -71,11 +72,6 @@ class MCPClient:
     async def disconnect_to_server(self):
         logger.info(f"\nDisconnecting to server [{self.name}]")
         await self.cleanup()
-        # if server_id in self.sessions:
-        #     del self.sessions[server_id]
-        #     logger.info(f"\nDisconnected to server [{server_id}]")
-        # else:
-        #     logger.error(f"\nDisconnected not found server [{server_id}]")
 
     async def handle_resource_change(params: NotificationParams):
         print(f"资源变更类型: {params['changeType']}")
@@ -83,12 +79,11 @@ class MCPClient:
     
     
     async def connect_to_server(self, server_script_path: str = "", server_script_args: list = [], 
-            server_script_envs: Dict = {}, command: str = ""):
+            server_script_envs: Dict = {}, command: str = "", server_url: str = ""):
         """Connect to an MCP server"""
-        if not ((command and server_script_args) or server_script_path):
-            raise ValueError("Run server via script or command.")
-
-        if server_script_path:
+        # if not ((command and server_script_args) or server_script_path):
+        #     raise ValueError("Run server via script or command.")
+        if  server_script_path:
             # run via script
             is_python = server_script_path.endswith('.py')
             is_js = server_script_path.endswith('.js')
@@ -117,10 +112,6 @@ class MCPClient:
                 command = "node"
             elif is_docker:
                 command = "docker"
-        else:
-            # run via command
-            if command not in ["npx", "uvx", "node", "python","docker","uv",]:
-                raise ValueError("Server command must be in the npx/uvx/node/python/docker/uv")
 
         env = get_default_environment()
         if self.env['AWS_ACCESS_KEY_ID'] and self.env['AWS_ACCESS_KEY_ID']:
@@ -129,26 +120,28 @@ class MCPClient:
             env['AWS_REGION'] = self.env['AWS_REGION']
         env.update(server_script_envs)
         try: 
-            server_params = StdioServerParameters(
-                command=command, args=server_script_args, env=env
-            )
+            if server_url:
+                transport = sse_client(server_url)
+            else:
+                transport = stdio_client(StdioServerParameters(
+                    command=command, args=server_script_args, env=env
+                ))
         except Exception as e:
             logger.error(f"\n{e}")
             raise ValueError(f"Invalid server script or command. {e}")
         logger.info(f"\nAdding server %s %s" % (command, server_script_args))
-        
         try:
-            stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
-            _stdio, _write = stdio_transport
+            _stdio, _write = await self.exit_stack.enter_async_context(transport)
             self.session = await self.exit_stack.enter_async_context(ClientSession(_stdio, _write))
             await self.session.initialize()
             logger.info(f"\n{self.name} session initialize done")
         except Exception as e:
             logger.error(f"\n{self.name} session initialize failed: {e}")
-            raise ValueError(f"Invalid server script or command. {e}")    
+            raise ValueError(f"Invalid server script or command. {e}")   
+        await self.list_mcp_server()
         
+    async def list_mcp_server(self):
         try:
- 
             resource = await self.session.list_resources()
             logger.info(f"\n{self.name} list_resources:{resource}")
         except McpError as e:
@@ -157,7 +150,8 @@ class MCPClient:
         response = await self.session.list_tools()
         tools = response.tools
         logger.info(f"\nConnected to server [{self.name}] with tools: " + str([tool for tool in tools]))
-
+        
+        
     async def get_tool_config(self, model_provider='bedrock', server_id : str = ''):
         """Get llm's tool usage config via MCP server"""
         # list tools via mcp server
