@@ -196,7 +196,7 @@ export class BedrockMcpStack extends cdk.Stack {
 
     // Create Launch Template
     const launchTemplate = new ec2.LaunchTemplate(this, `${prefix}-LaunchTemplate`, {
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MEDIUM),
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.C5, ec2.InstanceSize.XLARGE),
       machineImage: ec2.MachineImage.fromSsmParameter(
         '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id',
         { os: ec2.OperatingSystemType.LINUX }
