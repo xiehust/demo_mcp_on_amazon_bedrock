@@ -61,13 +61,16 @@ NEXT_PUBLIC_API_KEY=123456
 # 由于使用host网络模式，可以直接使用localhost访问宿主机服务
 SERVER_MCP_BASE_URL=http://localhost:7002
 
-# Base URL for MCP service - Client side (now uses Next.js API routes)
+# Base URL for MCP service - Client side (必须使用Next.js API路由避免CORS问题)
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
 > **注意**：我们使用Docker的host网络模式（network_mode: "host"），使容器直接共享宿主机的网络栈。
 > 这样容器可以直接使用localhost访问宿主机上运行的服务，简化了配置。
 > 使用host网络模式时，容器的端口会直接映射到宿主机上，无需额外的端口映射。
+> 
+> **重要**：客户端代码必须通过Next.js API路由（`/api`）访问后端服务，而不是直接访问后端服务地址，
+> 这样可以避免浏览器的跨域（CORS）限制。服务器端代码则使用`SERVER_MCP_BASE_URL`直接访问后端服务。
 
 4. 使用Docker Compose构建并启动服务
 ```bash
@@ -139,7 +142,7 @@ cp .env.example .env.local
 4. 编辑`.env.local`文件，添加必要的环境变量, `API_KEY`跟后端MCP后台服务，在项目根目录中.env定义的一致就可以
 ```
 NEXT_PUBLIC_API_KEY=123456
-NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
+SERVER_MCP_BASE_URL=http://localhost:7002
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
@@ -177,3 +180,50 @@ npm run dev
 ├── Dockerfile            # Docker构建文件
 └── pm2run.config.js      # PM2配置文件
 ```
+
+## Docker部署架构
+
+使用Docker部署时，应用程序运行在容器化环境中，具有以下优势：
+
+- 🔄 一致的运行环境，避免"在我的机器上能运行"的问题
+- 🚀 简化的部署流程，只需一个命令即可启动
+- 🛡️ 隔离的应用环境，提高安全性
+- 📦 便于分发和版本控制
+- 🔌 与其他Docker容器化服务（如数据库、缓存等）轻松集成
+
+### 网络架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Docker Host                                                    │
+│  ┌─────────────────────────┐                                    │
+│  │                         │                                    │
+│  │  mcp-bedrock-ui         │                                    │
+│  │  (Next.js Application)  │◄───┐                               │
+│  │  Port: 3000             │    │                               │
+│  │                         │    │                               │
+│  └───────────┬─────────────┘    │                               │
+│              │                  │                               │
+│              │                  │                               │
+│              ▼                  │                               │
+│  ┌───────────────────────┐      │      ┌─────────────────────┐  │
+│  │                       │      └──────┤                     │  │
+│  │  Next.js API Routes   │             │  Browser            │  │
+│  │  (/api/*)             │◄────────────┤                     │  │
+│  │                       │             │                     │  │
+│  └───────────┬───────────┘             └─────────────────────┘  │
+│              │                                                  │
+│              │                                                  │
+│              ▼                                                  │
+│  ┌───────────────────────┐                                      │
+│  │                       │                                      │
+│  │  MCP Backend Service  │                                      │
+│  │  Port: 7002           │                                      │
+│  │                       │                                      │
+│  └───────────────────────┘                                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**注意**：浏览器不能直接访问MCP后端服务，必须通过Next.js API路由进行代理，以避免CORS（跨域资源共享）问题。
