@@ -61,7 +61,7 @@ NEXT_PUBLIC_API_KEY=123456
 # 由于使用host网络模式，可以直接使用localhost访问宿主机服务
 SERVER_MCP_BASE_URL=http://localhost:7002
 
-# Base URL for MCP service - Client side (now uses Next.js API routes)
+# Base URL for MCP service - Client side (必须使用Next.js API路由避免CORS问题)
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
@@ -139,7 +139,7 @@ cp .env.example .env.local
 4. 编辑`.env.local`文件，添加必要的环境变量, `API_KEY`跟后端MCP后台服务，在项目根目录中.env定义的一致就可以
 ```
 NEXT_PUBLIC_API_KEY=123456
-NEXT_PUBLIC_MCP_BASE_URL=http://127.0.0.1:7002
+SERVER_MCP_BASE_URL=http://localhost:7002
 NEXT_PUBLIC_MCP_BASE_URL=/api
 ```
 
@@ -176,4 +176,49 @@ npm run dev
 ├── docker-compose.yml    # Docker Compose配置
 ├── Dockerfile            # Docker构建文件
 └── pm2run.config.js      # PM2配置文件
+```
+
+## Docker部署架构
+
+使用Docker部署时，应用程序运行在容器化环境中，具有以下优势：
+
+- 🔄 一致的运行环境，避免"在我的机器上能运行"的问题
+- 🚀 简化的部署流程，只需一个命令即可启动
+- 🛡️ 隔离的应用环境，提高安全性
+- 📦 便于分发和版本控制
+- 🔌 与其他Docker容器化服务（如数据库、缓存等）轻松集成
+
+### 网络架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│  Docker Host                                                    │
+│  ┌─────────────────────────┐                                    │
+│  │                         │                                    │
+│  │  mcp-bedrock-ui         │                                    │
+│  │  (Next.js Application)  │◄───┐                               │
+│  │  Port: 3000             │    │                               │
+│  │                         │    │                               │
+│  └───────────┬─────────────┘    │                               │
+│              │                  │                               │
+│              │                  │                               │
+│              ▼                  │                               │
+│  ┌───────────────────────┐      │      ┌─────────────────────┐  │
+│  │                       │      └──────┤                     │  │
+│  │  Next.js API Routes   │             │  Browser            │  │
+│  │  (/api/*)             │◄────────────┤                     │  │
+│  │                       │             │                     │  │
+│  └───────────┬───────────┘             └─────────────────────┘  │
+│              │                                                  │
+│              │                                                  │
+│              ▼                                                  │
+│  ┌───────────────────────┐                                      │
+│  │                       │                                      │
+│  │  MCP Backend Service  │                                      │
+│  │  Port: 7002           │                                      │
+│  │                       │                                      │
+│  └───────────────────────┘                                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```

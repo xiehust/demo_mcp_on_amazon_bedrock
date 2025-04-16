@@ -1,7 +1,8 @@
 import { Model, McpServer, Message } from './store'
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY
-const MCP_BASE_URL = process.env.NEXT_PUBLIC_MCP_BASE_URL || 'http://localhost:7002'
+// Use Next.js API routes instead of direct backend access to avoid CORS issues
+const MCP_BASE_URL = process.env.NEXT_PUBLIC_MCP_BASE_URL || '/api'
 
 // Helper function to get auth headers
 const getAuthHeaders = (userId: string) => {
