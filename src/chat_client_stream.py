@@ -98,6 +98,7 @@ class ChatClientStream(ChatClient):
         """Set the stop flag for a stream to terminate it"""
         if stream_id in self.stop_flags:
             self.stop_flags[stream_id] = True
+            # Signal any waiting code immediately without waiting for next check in the streaming loop
             logger.info(f"Stopping stream: {stream_id}")
             return True
         logger.warning(f"Attempted to stop unknown stream: {stream_id}")
@@ -245,8 +246,8 @@ class ChatClientStream(ChatClient):
                 async for event in self._process_stream_response(response):
                     # logger.info(event)
                     if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
-                        logger.info(f"Stream {stream_id} was requested to stop")
-                        yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                        logger.info(f"Event Stream {stream_id} was requested to stop")
+                        yield {"type": "stopped", "data": {"message": "Event Stream stopped by user request"}}
                         break
                     
                     if event['type'] == 'metadata':
