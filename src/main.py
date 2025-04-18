@@ -36,10 +36,17 @@ from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
 from mcp_client import MCPClient
 from chat_client_stream import ChatClientStream
+from compatible_chat_client_stream import CompatibleChatClientStream
 from mcp.shared.exceptions import McpError
+from fastapi import APIRouter
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+)
 # Initialize logger
 logger = logging.getLogger(__name__)
+
 
 # 全局模型和服务器配置
 load_dotenv()  # load env vars from .env
@@ -60,14 +67,18 @@ security = HTTPBearer()
 class UserSession:
     def __init__(self, user_id):
         self.user_id = user_id
-        if os.path.exists("conf/credentials.csv"):
-            self.chat_client = ChatClientStream(credential_file="conf/credentials.csv")
+        if os.environ.get('use_bedrock',"1") in [1,'1']:
+            if os.path.exists("conf/credentials.csv"):
+                self.chat_client = ChatClientStream(credential_file="conf/credentials.csv")
+            else:
+                self.chat_client = ChatClientStream()
         else:
-            self.chat_client = ChatClientStream()
+            self.chat_client = CompatibleChatClientStream()
+
         self.mcp_clients = {}  # 用户特定的MCP客户端
         self.last_active = datetime.now()
         self.session_id = str(uuid.uuid4())
-        self.lock = asyncio.Lock()  # 用于同步会话内的操作
+        # self.lock = asyncio.Lock()  # 用于同步会话内的操作
 
     async def cleanup(self):
         """清理用户会话资源"""
@@ -84,6 +95,12 @@ user_sessions = {}
 # 会话锁，防止会话创建和访问的竞争条件
 session_lock = threading.RLock()
 
+
+# 活跃流式请求的字典，用于跟踪可以停止的请求
+active_streams = {}
+
+# 使用独立的锁来保护active_streams字典
+active_streams_lock = asyncio.Lock()
 
 def save_configs_to_json(configs:dict):
     config_file = os.environ.get('USER_MCP_CONFIG_FILE', 'conf/user_mcp_configs.json')
@@ -401,6 +418,9 @@ app.add_middleware(
     allow_headers=["*"],  # 允许所有头，包括自定义的X-User-ID
 )
 
+# 配置单独的路由组，确保停止路由不受streaming路由的并发限制影响
+stop_router = APIRouter()
+list_router = APIRouter()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -410,7 +430,7 @@ async def validation_exception_handler(request, exc):
                 msg=str(exc.errors())
             ).model_dump())
 
-@app.get("/v1/list/models")
+@list_router.get("/v1/list/models")
 async def list_models(
     request: Request,
     auth: HTTPAuthorizationCredentials = Security(security)
@@ -421,7 +441,7 @@ async def list_models(
         "model_id": mid, 
         "model_name": name} for mid, name in llm_model_list.items()]})
 
-@app.get("/v1/list/mcp_server")
+@list_router.get("/v1/list/mcp_server")
 async def list_mcp_server(
     request: Request,
     auth: HTTPAuthorizationCredentials = Security(security)
@@ -441,48 +461,89 @@ async def list_mcp_server(
         "server_id": sid, 
         "server_name": name} for sid, name in server_list.items()]})
 
-@app.post("/v1/stop/stream/{stream_id}")
+# 将stop_router包含在主应用中, 注意这个顺序必须在接口定义之后
+app.include_router(list_router)
+
+
+# 使用单独的路由器处理stop请求，以避免被streaming请求阻塞
+@stop_router.post("/v1/stop/stream/{stream_id}")
 async def stop_stream(
     stream_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     auth: HTTPAuthorizationCredentials = Security(security)
 ):
     """停止正在进行的模型输出流"""
     global active_streams
-    # 获取用户会话
-    session = await get_or_create_user_session(request, auth)
-    user_id = session.user_id
+    logger.info(f"stopping request:{stream_id} in {active_streams}")
     
-    # 检查流是否存在且属于当前用户
-    authorized = True
-    if stream_id in active_streams:
-        if active_streams[stream_id] != user_id:
-            authorized = False
-    else:
-        # 流ID不在活跃列表中，但我们仍然尝试停止它
-        logger.warning(f"Stream {stream_id} not found in active_streams but still trying to stop it")
-    
-    if not authorized:
-        return JSONResponse(content={"errno": -1, "msg": "Not authorized to stop this stream"})
-    
-    # 调用流停止功能，即使流可能已经结束
     try:
-        success = session.chat_client.stop_stream(stream_id)
+        # 获取用户会话
+        session = await get_or_create_user_session(request, auth)
+        user_id = session.user_id
         
-        if success:
-            # 从活跃流列表中移除
+        # 检查流是否存在且属于当前用户
+        authorized = True
+        async with active_streams_lock:
             if stream_id in active_streams:
-                del active_streams[stream_id]
-            return JSONResponse(content={"errno": 0, "msg": "Stream stopping initiated"})
-        else:
-            # 即使返回失败也尝试从活跃流列表中移除，防止僵尸流
-            if stream_id in active_streams:
-                del active_streams[stream_id]
-            logger.warning(f"Failed to stop stream {stream_id}")
-            return JSONResponse(content={"errno": 0, "msg": "Stream may have already completed"})
+                if active_streams[stream_id] != user_id:
+                    authorized = False
+            else:
+                # 流ID不在活跃列表中，但我们仍然尝试停止它
+                logger.warning(f"Stream {stream_id} not found in active_streams but still trying to stop it")
+        
+        if not authorized:
+            return JSONResponse(content={"errno": -1, "msg": "Not authorized to stop this stream"})
+        
+        # 使用BackgroundTasks处理停止流的操作，确保即使客户端断开连接，流也能被正确停止
+        def stop_stream_task(stream_id, session):
+            try:
+                # 调用流停止功能，即使流可能已经结束
+                success = session.chat_client.stop_stream(stream_id)
+                if success:
+                    logger.info(f"Successfully initiated stop for stream {stream_id}")
+                    
+                    # 在异步任务中安全地更新共享状态
+                    try:
+                        if stream_id in active_streams:
+                            active_streams.pop(stream_id, None)
+                            logger.info(f"Removed {stream_id} from active_streams")
+                    except Exception as e:
+                        logger.error(f"Error removing stream from active_streams: {e}")
+                else:
+                    logger.warning(f"Failed to stop stream {stream_id}")
+                    # 即使返回失败也尝试从活跃流列表中移除，防止僵尸流
+                    try:
+                        if stream_id in active_streams:
+                            active_streams.pop(stream_id, None)
+                    except Exception as e:
+                        logger.error(f"Error removing stream from active_streams: {e}")
+                        
+            except Exception as e:
+                logger.error(f"Error in background task stopping stream {stream_id}: {e}")
+        
+        # 添加后台任务
+        background_tasks.add_task(stop_stream_task, stream_id, session)
+        
+        # 立即返回响应给客户端
+        return JSONResponse(
+            content={"errno": 0, "msg": "Stream stopping initiated"},
+            # 添加特殊的响应头，使浏览器不缓存此响应
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+        
     except Exception as e:
         logger.error(f"Error stopping stream {stream_id}: {e}")
         return JSONResponse(content={"errno": -1, "msg": f"Error stopping stream: {str(e)}"})
+
+# 将stop_router包含在主应用中, 注意这个顺序必须在接口定义之后
+app.include_router(stop_router)
+
+
 
 @app.post("/v1/add/mcp_server")
 async def add_mcp_server(
@@ -497,99 +558,99 @@ async def add_mcp_server(
     user_id = session.user_id
     
     # 使用会话锁确保操作是线程安全的
-    async with session.lock:
-        if data.server_id in session.mcp_clients:
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=-1,
-                msg="MCP server id exists for this user!"
-            ).model_dump())
-        
-        server_id = data.server_id
-        server_cmd = data.command
-        server_script_args = data.args
-        server_script_envs = data.env
-        server_desc = data.server_desc if data.server_desc else data.server_id
-        
-        # 处理配置JSON
-        if data.config_json:
-            config_json = data.config_json
-            if not all([isinstance(k, str) for k in config_json.keys()]):
-                return JSONResponse(content=AddMCPServerResponse(
-                    errno=-1,
-                    msg="env key must be str!"
-                ).model_dump())
-                
-            if "mcpServers" in config_json:
-                config_json = config_json["mcpServers"]
-                
-            server_id = list(config_json.keys())[0]
-            server_cmd = config_json[server_id].get("command","")
-            server_url = config_json[server_id].get("url","")
-            server_script_args = config_json[server_id].get("args",[])
-            server_script_envs = config_json[server_id].get('env',{})
-            
-        # 连接MCP服务器
-        tool_conf = {}
-        try:
-            # 创建客户端对象移到try块内
-            mcp_client = MCPClient(name=f"{session.user_id}_{server_id}")
-            
-            # 添加超时控制
-            connect_task = mcp_client.connect_to_server(
-                command=server_cmd,
-                server_url=server_url,
-                server_script_args=server_script_args,
-                server_script_envs=server_script_envs
-            )
-            
-            # 设置30秒超时
-            await asyncio.wait_for(connect_task, timeout=30.0)
-            
-            tool_conf = await mcp_client.get_tool_config(server_id=server_id)
-            logger.info(f"User {session.user_id} connected to MCP server {server_id}, tools={tool_conf}")
-            
-            # 保存用户服务器配置以便将来恢复
-            server_config = {
-                "url":server_url,
-                "command": server_cmd,
-                "args": server_script_args,
-                "env": server_script_envs,
-                "description": server_desc
-            }
-            await save_user_server_config(user_id, server_id, server_config)
-            
-            # 成功连接后才将客户端添加到用户会话
-            session.mcp_clients[server_id] = mcp_client
-            
-        except asyncio.TimeoutError:
-            logger.error(f"连接MCP服务器 {server_id} 超时")
-            # 清理超时的连接资源
-            try:
-                await mcp_client.cleanup()
-            except Exception as cleanup_error:
-                logger.error(f"清理超时连接资源失败: {cleanup_error}")
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=-1,
-                msg="MCP server connection timeout!"
-            ).model_dump())
-        except Exception as e:
-            logger.error(f"User {session.user_id} connect to MCP server {server_id} error: {e}")
-            # 清理失败的连接资源
-            try:
-                await mcp_client.cleanup()
-            except Exception as cleanup_error:
-                logger.error(f"清理失败连接资源出错: {cleanup_error}")
-            return JSONResponse(content=AddMCPServerResponse(
-                errno=-1,
-                msg=f"MCP server connect failed: {str(e)}"
-            ).model_dump())
-
-        # await save_user_mcp_configs()
+    # async with session.lock:
+    if data.server_id in session.mcp_clients:
         return JSONResponse(content=AddMCPServerResponse(
-            errno=0,
-            msg="The server already been added!",
-            data={"tools": tool_conf.get("tools", {}) if tool_conf else {}}
+            errno=-1,
+            msg="MCP server id exists for this user!"
         ).model_dump())
+    
+    server_id = data.server_id
+    server_cmd = data.command
+    server_script_args = data.args
+    server_script_envs = data.env
+    server_desc = data.server_desc if data.server_desc else data.server_id
+    
+    # 处理配置JSON
+    if data.config_json:
+        config_json = data.config_json
+        if not all([isinstance(k, str) for k in config_json.keys()]):
+            return JSONResponse(content=AddMCPServerResponse(
+                errno=-1,
+                msg="env key must be str!"
+            ).model_dump())
+            
+        if "mcpServers" in config_json:
+            config_json = config_json["mcpServers"]
+            
+        server_id = list(config_json.keys())[0]
+        server_cmd = config_json[server_id].get("command","")
+        server_url = config_json[server_id].get("url","")
+        server_script_args = config_json[server_id].get("args",[])
+        server_script_envs = config_json[server_id].get('env',{})
+        
+    # 连接MCP服务器
+    tool_conf = {}
+    try:
+        # 创建客户端对象移到try块内
+        mcp_client = MCPClient(name=f"{session.user_id}_{server_id}")
+        
+        # 添加超时控制
+        connect_task = mcp_client.connect_to_server(
+            command=server_cmd,
+            server_url=server_url,
+            server_script_args=server_script_args,
+            server_script_envs=server_script_envs
+        )
+        
+        # 设置30秒超时
+        await asyncio.wait_for(connect_task, timeout=30.0)
+        
+        tool_conf = await mcp_client.get_tool_config(server_id=server_id)
+        logger.info(f"User {session.user_id} connected to MCP server {server_id}, tools={tool_conf}")
+        
+        # 保存用户服务器配置以便将来恢复
+        server_config = {
+            "url":server_url,
+            "command": server_cmd,
+            "args": server_script_args,
+            "env": server_script_envs,
+            "description": server_desc
+        }
+        await save_user_server_config(user_id, server_id, server_config)
+        
+        # 成功连接后才将客户端添加到用户会话
+        session.mcp_clients[server_id] = mcp_client
+        
+    except asyncio.TimeoutError:
+        logger.error(f"连接MCP服务器 {server_id} 超时")
+        # 清理超时的连接资源
+        try:
+            await mcp_client.cleanup()
+        except Exception as cleanup_error:
+            logger.error(f"清理超时连接资源失败: {cleanup_error}")
+        return JSONResponse(content=AddMCPServerResponse(
+            errno=-1,
+            msg="MCP server connection timeout!"
+        ).model_dump())
+    except Exception as e:
+        logger.error(f"User {session.user_id} connect to MCP server {server_id} error: {e}")
+        # 清理失败的连接资源
+        try:
+            await mcp_client.cleanup()
+        except Exception as cleanup_error:
+            logger.error(f"清理失败连接资源出错: {cleanup_error}")
+        return JSONResponse(content=AddMCPServerResponse(
+            errno=-1,
+            msg=f"MCP server connect failed: {str(e)}"
+        ).model_dump())
+
+    # await save_user_mcp_configs()
+    return JSONResponse(content=AddMCPServerResponse(
+        errno=0,
+        msg="The server already been added!",
+        data={"tools": tool_conf.get("tools", {}) if tool_conf else {}}
+    ).model_dump())
 
 @app.delete("/v1/remove/mcp_server/{server_id}")
 async def remove_mcp_server(
@@ -638,8 +699,6 @@ async def remove_mcp_server(
             msg=f"Failed to remove server: {str(e)}"
         ).model_dump())
 
-# 活跃流式请求的字典，用于跟踪可以停止的请求
-active_streams = {}
 
 async def stream_chat_response(data: ChatCompletionRequest, session: UserSession, stream_id: str = None) -> AsyncGenerator[str, None]:
     """为特定用户生成流式聊天响应"""
@@ -650,9 +709,10 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
     if stream_id:
         try:
             # 先在ChatClientStream中注册流，然后再添加到active_streams
-            session.chat_client.register_stream(stream_id)
+            # session.chat_client.register_stream(stream_id)
             active_streams[stream_id] = session.user_id
             logger.info(f"Stream {stream_id} registered for user {session.user_id}")
+            logger.info(f"active_streams:{active_streams}")
         except Exception as e:
             logger.error(f"Error registering stream {stream_id}: {e}")
     # Process messages with possible structured content
@@ -1043,75 +1103,75 @@ async def chat_completions(
 
     try:
         tool_use_info = {}
-        async with session.lock:  # 确保当前用户的请求按顺序处理
-            async for response in session.chat_client.process_query(
-                    model_id=data.model,
-                    max_tokens=data.max_tokens,
-                    temperature=data.temperature,
-                    history=messages,
-                    system=system,
-                    max_turns=MAX_TURNS,
-                    mcp_clients=session.mcp_clients,
-                    mcp_server_ids=data.mcp_server_ids,
-                    extra_params=data.extra_params,
-                    ):
-                logger.info(f"response body for user {session.user_id}: {response}")
-                is_tool_use = any([bool(x.get('toolUse')) for x in response['content']])
-                is_tool_result = any([bool(x.get('toolResult')) for x in response['content']])
-                is_answer = any([bool(x.get('text')) for x in response['content']])
+        # async with session.lock:  # 确保当前用户的请求按顺序处理
+        async for response in session.chat_client.process_query(
+                model_id=data.model,
+                max_tokens=data.max_tokens,
+                temperature=data.temperature,
+                history=messages,
+                system=system,
+                max_turns=MAX_TURNS,
+                mcp_clients=session.mcp_clients,
+                mcp_server_ids=data.mcp_server_ids,
+                extra_params=data.extra_params,
+                ):
+            logger.info(f"response body for user {session.user_id}: {response}")
+            is_tool_use = any([bool(x.get('toolUse')) for x in response['content']])
+            is_tool_result = any([bool(x.get('toolResult')) for x in response['content']])
+            is_answer = any([bool(x.get('text')) for x in response['content']])
 
-                if is_tool_use:
-                    for x in response['content']:
-                        if 'toolUse' not in x or not x['toolUse'].get('name'):
-                            continue
-                        tool_id = x['toolUse'].get('toolUseId')
-                        if not tool_id:
-                            continue
-                        if tool_id not in tool_use_info:
-                            tool_use_info[tool_id] = {}
-                        tool_use_info[tool_id]['name'] = x['toolUse']['name']
-                        tool_use_info[tool_id]['arguments'] = x['toolUse']['input']
+            if is_tool_use:
+                for x in response['content']:
+                    if 'toolUse' not in x or not x['toolUse'].get('name'):
+                        continue
+                    tool_id = x['toolUse'].get('toolUseId')
+                    if not tool_id:
+                        continue
+                    if tool_id not in tool_use_info:
+                        tool_use_info[tool_id] = {}
+                    tool_use_info[tool_id]['name'] = x['toolUse']['name']
+                    tool_use_info[tool_id]['arguments'] = x['toolUse']['input']
 
-                if is_tool_result:
-                    for x in response['content']:
-                        if 'toolResult' not in x:
-                            continue
-                        tool_id = x['toolResult'].get('toolUseId')
-                        if not tool_id:
-                            continue
-                        if tool_id not in tool_use_info:
-                            tool_use_info[tool_id] = {}
-                        tool_use_info[tool_id]['result'] = x['toolResult']['content'][0]['text']
+            if is_tool_result:
+                for x in response['content']:
+                    if 'toolResult' not in x:
+                        continue
+                    tool_id = x['toolResult'].get('toolUseId')
+                    if not tool_id:
+                        continue
+                    if tool_id not in tool_use_info:
+                        tool_use_info[tool_id] = {}
+                    tool_use_info[tool_id]['result'] = x['toolResult']['content'][0]['text']
 
-                if is_tool_use or is_tool_result:
-                    continue
+            if is_tool_use or is_tool_result:
+                continue
 
-                chat_response = ChatResponse(
-                    id=f"chat{time.time_ns()}",
-                    created=int(time.time()),
-                    model=data.model,
-                    choices=[
-                        {
-                            "index": 0,
-                            "message": {
-                                "role": "assistant",
-                                "content": response['content'][0]['text'],
-                            },
-                            "message_extras": {
-                                "tool_use": [info for too_id, info in tool_use_info.items()],
-                            },
-                            "logprobs": None,  
-                            "finish_reason": "stop", 
-                        }
-                    ],
-                    usage={
-                        "prompt_tokens": 0, 
-                        "completion_tokens": 0,
-                        "total_tokens": 0,
+            chat_response = ChatResponse(
+                id=f"chat{time.time_ns()}",
+                created=int(time.time()),
+                model=data.model,
+                choices=[
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": response['content'][0]['text'],
+                        },
+                        "message_extras": {
+                            "tool_use": [info for too_id, info in tool_use_info.items()],
+                        },
+                        "logprobs": None,  
+                        "finish_reason": "stop", 
                     }
-                )
-                
-                return JSONResponse(content=chat_response.model_dump())
+                ],
+                usage={
+                    "prompt_tokens": 0, 
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                }
+            )
+            
+            return JSONResponse(content=chat_response.model_dump())
     except Exception as e:
         logger.error(f"Error processing request for user {session.user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1146,7 +1206,6 @@ if __name__ == '__main__':
                 # 加载模型配置
                 for model_conf in conf.get('models', []):
                     llm_model_list[model_conf['model_id']] = model_conf['model_name']
-        # logger.info(f"shared_mcp_server_list:{shared_mcp_server_list}")
         config = uvicorn.Config(app, host=args.host, port=args.port, loop=loop)
         server = uvicorn.Server(config)
         loop.run_until_complete(server.serve())
@@ -1158,11 +1217,4 @@ if __name__ == '__main__':
         
         if cleanup_tasks:
             loop.run_until_complete(asyncio.gather(*cleanup_tasks))
-        
-        # 保存用户配置
-        # try:
-        #     loop.run_until_complete(save_user_mcp_configs())
-        # except:
-        #     pass
-        
         loop.close()
