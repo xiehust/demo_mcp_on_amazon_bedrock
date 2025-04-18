@@ -15,6 +15,11 @@ from utils import maybe_filter_to_n_most_recent_images
 import pandas as pd
 load_dotenv()  # load environment variables from .env
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+)
 logger = logging.getLogger(__name__)
 
 CLAUDE_37_SONNET_MODEL_ID = 'us.anthropic.claude-3-7-sonnet-20250219-v1:0'
