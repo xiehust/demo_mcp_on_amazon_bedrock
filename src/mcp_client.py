@@ -19,7 +19,11 @@ from dotenv import load_dotenv
 from mcp.client.sse import sse_client
 
 load_dotenv()  # load environment variables from .env
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+)
 logger = logging.getLogger(__name__)
 delimiter = "___"
 tool_name_mapping = {}

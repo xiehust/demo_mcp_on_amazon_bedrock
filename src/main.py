@@ -26,7 +26,14 @@ from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 import boto3
 from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks, Security
-from utils import save_to_ddb, get_from_ddb, dynamodb_client, scan_all_from_ddb,hash_filename,clean_filename
+from utils import  (get_global_server_configs,
+                    hash_filename,
+                    save_global_server_config,
+                    delete_user_server_config,
+                    get_user_server_configs,
+                    load_user_mcp_configs,
+                    session_lock,
+                    save_user_server_config)
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security.api_key import APIKeyHeader
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -52,12 +59,15 @@ logger = logging.getLogger(__name__)
 load_dotenv()  # load env vars from .env
 llm_model_list = {}
 shared_mcp_server_list = {}  # 共享的MCP服务器描述信息
-global_mcp_server_configs = {}  # 全局MCP服务器配置 server_id -> config
-user_mcp_server_configs = {}  # 用户特有的MCP服务器配置 user_id -> {server_id: config}
+# 用户会话存储
+user_sessions = {}
+# 活跃流式请求的字典，用于跟踪可以停止的请求
+active_streams = {}
+# 使用独立的锁来保护active_streams字典
+active_streams_lock = asyncio.Lock()
 MAX_TURNS = int(os.environ.get("MAX_TURNS",200))
 INACTIVE_TIME = int(os.environ.get("INACTIVE_TIME",60*24))  #mins
 DDB_TABLE = os.environ.get("ddb_table")  # DynamoDB表名，用于存储用户配置
-
 API_KEY = os.environ.get("API_KEY")
 
 security = HTTPBearer()
@@ -90,137 +100,13 @@ class UserSession:
             await asyncio.gather(*cleanup_tasks)
             logger.info(f"用户 {self.user_id} 的 {len(cleanup_tasks)} 个MCP客户端已清理")
 
-# 用户会话存储
-user_sessions = {}
-# 会话锁，防止会话创建和访问的竞争条件
-session_lock = threading.RLock()
-
-
-# 活跃流式请求的字典，用于跟踪可以停止的请求
-active_streams = {}
-
-# 使用独立的锁来保护active_streams字典
-active_streams_lock = asyncio.Lock()
-
-def save_configs_to_json(configs:dict):
-    config_file = os.environ.get('USER_MCP_CONFIG_FILE', 'conf/user_mcp_configs.json')
-    with open(config_file, 'w') as f:
-        json.dump(configs, f, indent=2)
 
 async def get_api_key(auth: HTTPAuthorizationCredentials = Security(security)):
     if auth.credentials == API_KEY:
         return auth.credentials
     raise HTTPException(status_code=403, detail="Could not validate credentials")
 
-# 保存全局MCP服务器配置
-def save_global_server_config( server_id: str, config: dict):
-    """保存全局的MCP服务器配置"""
-    global global_mcp_server_configs
-    global_mcp_server_configs[server_id] = config
-    # 在实际应用中，这里应该将配置持久化到数据库或文件系统
-    logger.info(f"保存Global服务器配置 {server_id}")
-
-# 删除用户MCP服务器配置 
-async def delete_user_server_config(user_id: str, server_id: str):
-    """删除用户的MCP服务器配置"""
-    global user_mcp_server_configs
-    with session_lock: 
-        if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
-            del user_mcp_server_configs[user_id][server_id]
-            # 如果配置了DynamoDB，也从DDB中更新用户配置
-            if DDB_TABLE and dynamodb_client:
-                # 获取当前用户的所有配置
-                user_configs = await get_user_server_configs(user_id)
-                if server_id in user_configs:
-                    del user_configs[server_id]
-                # 保存更新后的配置到DynamoDB
-                await save_to_ddb(user_id, user_configs)
-                logger.info(f"已更新用户 {user_id} 在DynamoDB中的配置")
-            else:
-                try:
-                    save_configs_to_json(user_mcp_server_configs)
-                    logger.info(f"为用户 {user_id} 删除服务器配置 {server_id}")
-                except Exception as e:
-                    logger.error(f"保存用户MCP配置到文件失败: {e}")
-
-
-# 保存用户MCP服务器配置
-async def save_user_server_config(user_id: str, server_id: str, config: dict):
-    """保存用户的MCP服务器配置"""
-    global user_mcp_server_configs
-    
-    with session_lock:
-        if user_id not in user_mcp_server_configs:
-            user_mcp_server_configs[user_id] = {}
-        
-        user_mcp_server_configs[user_id][server_id] = config
-        # 如果配置了DynamoDB，也保存到DDB中
-        if DDB_TABLE and dynamodb_client:
-            #获取原有的记录
-            ddb_config = await get_from_ddb(user_id)
-            ddb_config[server_id] = config
-            await save_to_ddb(user_id, ddb_config)
-            logger.info(f"已保存用户 {user_id} 配置到DynamoDB")
-        else:
-            try:
-                save_configs_to_json(user_mcp_server_configs)
-                logger.info(f"已保存用户 {user_id} 配置到config_file")
-            except Exception as e:
-                logger.error(f"保存用户MCP配置到文件失败: {e}")
-
-# 获取用户MCP服务器配置
-async def get_user_server_configs(user_id: str) -> dict:
-    """获取指定用户的所有MCP服务器配置"""
-    # 如果设置了DynamoDB表名，优先从DynamoDB读取
-    if DDB_TABLE and dynamodb_client:
-        # 尝试从DynamoDB获取
-        ddb_config = await get_from_ddb(user_id)
-        if ddb_config:
-            # 如果DynamoDB中有数据，更新内存缓存并返回
-            with session_lock:
-                user_mcp_server_configs[user_id] = ddb_config
-            return ddb_config
-        else:
-            return {}
-    else: 
-        # 如果没有设置DynamoDB或无法从DynamoDB获取，从内存中读取
-        return user_mcp_server_configs.get(user_id, {})
-
-
-# 获取global服务器配置
-def get_global_server_configs() -> dict:
-    """获取全局所有MCP服务器配置"""
-    return global_mcp_server_configs
-
-async def load_user_mcp_configs():
-    """加载用户MCP服务器配置"""
-    global user_mcp_server_configs
-    # 如果设置了DynamoDB表名，从DynamoDB加载所有用户配置
-    if DDB_TABLE and dynamodb_client:
-        logger.info(f"从DynamoDB加载所有用户MCP配置")
-        try:
-            # 使用scan_all_from_ddb扫描所有用户配置
-            ddb_configs = await scan_all_from_ddb()
-            if ddb_configs:
-                # 如果DynamoDB中有数据，更新内存缓存
-                with session_lock:
-                    user_mcp_server_configs = ddb_configs
-                    logger.info(f"已从DynamoDB加载 {len(ddb_configs)} 个用户的MCP服务器配置")
-        except Exception as e:
-            logger.error(f"从DynamoDB加载用户MCP配置失败: {e}")
-    else:
-        # 如果没有设置DynamoDB或从DynamoDB加载失败，从文件加载
-        try:
-            config_file = os.environ.get('USER_MCP_CONFIG_FILE', 'conf/user_mcp_configs.json')
-            if os.path.exists(config_file):
-                with session_lock:
-                    with open(config_file, 'r') as f:
-                        configs = json.load(f)
-                        user_mcp_server_configs = configs
-                        logger.info(f"已从文件加载 {len(configs)} 个用户的MCP服务器配置")
-        except Exception as e:
-            logger.error(f"加载用户MCP配置失败: {e}")
-        
+            
 async def initialize_user_servers(session: UserSession):
     """初始化用户特有的MCP服务器"""
     user_id = session.user_id
@@ -680,10 +566,6 @@ async def remove_mcp_server(
 
         # 从用户配置中删除
         await delete_user_server_config(user_id, server_id)
-        #save conf
-        # await save_user_mcp_configs()
-        # if user_id in user_mcp_server_configs and server_id in user_mcp_server_configs[user_id]:
-        #     del user_mcp_server_configs[user_id][server_id]
         logger.info(f"User {user_id} removed MCP server {server_id}")
             
         

@@ -24,6 +24,11 @@ from mcp_client import MCPClient
 from utils import maybe_filter_to_n_most_recent_images, remove_cache_checkpoint
 
 load_dotenv()  # load environment variables from .env
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
+)
 logger = logging.getLogger(__name__)
 
 class CompatibleChatClientStream(ChatClient):
@@ -70,6 +75,7 @@ class CompatibleChatClientStream(ChatClient):
         """Process streaming response from OpenAI SDK format"""
         try:
             # For SDK streamed responses, we iterate through the chunks
+            tool_index=0
             for chunk in stream_response:
                 # Process each chunk from the stream
                 if hasattr(chunk, 'choices') and chunk.choices:
@@ -88,10 +94,28 @@ class CompatibleChatClientStream(ChatClient):
                                 "type": "block_delta",
                                 "data": {"delta": {"text": content}}
                             }
-                    
+                            
+                    # Thinking delta
+                    if hasattr(choice, 'delta') and hasattr(choice.delta, 'reasoning_content') and choice.delta.reasoning_content is not None:
+                        content = choice.delta.reasoning_content
+                        if content:
+                            yield {
+                                "type": "block_delta",
+                                "data": {"delta": {"reasoningContent": {"text": content}}}
+                            }
+                            
                     # Tool calls
                     if hasattr(choice, 'delta') and hasattr(choice.delta, 'tool_calls') and choice.delta.tool_calls:
                         for tool_call in choice.delta.tool_calls:
+                            if hasattr(tool_call,'index'):
+                                # 如果index变化，说明是新的tool call，需要发送一个block stop标志
+                                if not tool_index == tool_call.index:
+                                    tool_index = tool_call.index
+                                    yield {
+                                        "type": "block_stop",
+                                        "data":{}
+                                    }
+                                    
                             if hasattr(tool_call, 'function'):
                                 function = tool_call.function
                                 
@@ -344,6 +368,20 @@ class CompatibleChatClientStream(ChatClient):
                                 current_tool_use["input"] = current_tooluse_input 
                         if "text" in delta.get("delta", {}):
                             current_content += delta["delta"]["text"]
+                            
+                        if "reasoningContent" in delta.get("delta", {}):
+                            if 'text' in delta["delta"]['reasoningContent']:
+                                thinking_text += delta["delta"]['reasoningContent']["text"]
+                                
+                    # Handle tool use input in content block stop
+                    if event["type"] == "block_stop":
+                        if current_tooluse_input:
+                            #取出最近添加的tool,把input str转成json
+                            # logger.info(current_tooluse_input)
+                            current_tool_use = tool_calls[-1]
+                            if current_tool_use:
+                                current_tool_use["input"] = json.loads(current_tooluse_input)
+                                current_tooluse_input = ''
                             
                     # Handle message stop and tool use
                     if event["type"] == "message_stop":     
