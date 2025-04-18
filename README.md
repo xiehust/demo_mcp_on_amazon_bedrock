@@ -1,6 +1,6 @@
 # MCP on Amazon Bedrock[[English Readme](./README.en.md)]
 ### 更新日志
-- [20250418] 新增中国区硅基流动deepseek v3模型支持
+- [20250418] 新增中国区硅基流动deepseek v3模型支持，新增sse server支持
   - 注意如果是升级安装，需要运行`uv sync`更新依赖环境
 
 - Demo Vides
