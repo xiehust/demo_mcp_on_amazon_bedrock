@@ -1,5 +1,10 @@
 # MCP on Amazon Bedrock[[English Readme](./README.en.md)]
 ### 更新日志
+- [20250419] Keep Server Session 功能，可以在服务器端保存session所有历史消息，包括（Tool use历史）
+  - UI开启方法：UI上通过`Keep Session on Server`开关控制,点击`Clear Conversion`时，会向服务端发起`v1/remove/history`请求清空服务器session消息。
+  - 如果直接使用服务端接口，在ChatCompletionRequest中加入keep_session=True,表示在服务端保存，messages中只需要传入system和最新的user 即可，无须再传入历史消息。
+  - 如果要清空服务器端历史，需要发起`POST v1/remove/history`请求
+  
 - [20250418] 新增中国区硅基流动deepseek v3模型支持，新增sse server支持
   - 注意如果是升级安装，需要运行`uv sync`更新依赖环境
 
@@ -207,6 +212,7 @@ curl http://127.0.0.1:7002/v1/chat/completions \
     "model": "us.amazon.nova-pro-v1:0",
     "mcp_server_ids":["local_fs"],
     "stream":true,
+    "keep_session":false,
     "messages": [
       {
         "role": "user",
@@ -215,6 +221,7 @@ curl http://127.0.0.1:7002/v1/chat/completions \
     ]
   }'
 ```
+- 如果keep_session:true表示在服务器端保持session，服务器会保留历史消息和工具调用，客户端只需传入最新一轮的user message即可
 
 ### 3.3  (🚀 New) React UI
 - 🚀 基于Next.js 15和React 18构建的现代化前端，支持Dark/Light模式

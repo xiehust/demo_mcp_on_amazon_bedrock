@@ -43,7 +43,6 @@ class CompatibleChatClientStream(ChatClient):
         self.max_delay = 60  # Maximum backoff delay in seconds
         self.client_index = 0
         self.stop_flags = {}  # Dict to track stop flags for streams
-        
         # Initialize the OpenAI client
         self.openai_client = OpenAI(
             api_key=self.api_key,
@@ -70,13 +69,25 @@ class CompatibleChatClientStream(ChatClient):
         if stream_id in self.stop_flags:
             del self.stop_flags[stream_id]
             logger.info(f"Unregistered stream: {stream_id}")
+
             
-    async def _process_openai_stream_response(self, stream_response) -> AsyncIterator[Dict]:
+    async def _process_openai_stream_response(self,stream_id:str, stream_response) -> AsyncIterator[Dict]:
         """Process streaming response from OpenAI SDK format"""
         try:
             # For SDK streamed responses, we iterate through the chunks
             tool_index=0
+            last_yield_time = time.time()
             for chunk in stream_response:
+                current_time = time.time()
+                if current_time - last_yield_time > 0.1:  # 每100ms让出一次控制权，避免阻塞
+                    await asyncio.sleep(0.001)
+                    last_yield_time = current_time
+                
+                if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
+                    logger.info(f"Stream {stream_id} was requested to stop")
+                    yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                    break
+                    
                 # Process each chunk from the stream
                 if hasattr(chunk, 'choices') and chunk.choices:
                     choice = chunk.choices[0]
@@ -149,6 +160,10 @@ class CompatibleChatClientStream(ChatClient):
                     
                     # Finish reason
                     if hasattr(choice, 'finish_reason') and choice.finish_reason:
+                        yield {
+                                "type": "block_stop",
+                                "data":{}
+                            }
                         if choice.finish_reason == 'tool_calls':
                             yield {"type": "message_stop", "data": {"stopReason": "tool_use"}}
                         else:
@@ -262,20 +277,23 @@ class CompatibleChatClientStream(ChatClient):
         
         return openai_tools
     
-    async def process_query_stream(self, query: str = "",
+    async def process_query_stream(self, 
             model_id="", max_tokens=1024, max_turns=30, temperature=0.1,
-            history=[], system=[], mcp_clients=None, mcp_server_ids=[], extra_params={},
+            messages=[], system=[], mcp_clients=None, mcp_server_ids=[], extra_params={},keep_session=None,
             stream_id=None) -> AsyncGenerator[Dict, None]:
         """Submit user query or history messages, and get streaming response using OpenAI API.
         
         Similar to process_query but uses OpenAI v1/chat/completions API for streaming responses.
         """
-        if query:
-            history.append({
-                "role": "user",
-                "content": [{"text": query}]
-            })
-        messages = history
+        logger.info(f'client input message list length:{len(messages)}')
+
+        if keep_session:
+            messages = self.messages + messages
+            system = self.system if self.system else system
+        else:
+            self.clear_history()
+            
+        logger.info(f'llm input message list length:{len(messages)}')
 
         # get tools from mcp server
         tool_config = {"tools": []}
@@ -339,13 +357,13 @@ class CompatibleChatClientStream(ChatClient):
                 response = self.openai_client.chat.completions.create(**request_payload)
                 
                 # Process the streaming response
-                async for event in self._process_openai_stream_response(response):
+                async for event in self._process_openai_stream_response(stream_id,response):
                     # logger.info(event)
                     # Check again if stream was stopped
-                    if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
-                        logger.info(f"Stream {stream_id} was requested to stop")
-                        yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
-                        break
+                    # if stream_id and stream_id in self.stop_flags and self.stop_flags[stream_id]:
+                    #     logger.info(f"Stream {stream_id} was requested to stop")
+                    #     yield {"type": "stopped", "data": {"message": "Stream stopped by user request"}}
+                    #     break
                     
                     # Forward the event to the caller
                     yield event
@@ -525,6 +543,8 @@ class CompatibleChatClientStream(ChatClient):
                 turn_i = max_turns + 1
                 break
                 
+        # Save the max history to session
+        self.messages = messages
+        self.system = system
         # Clean up the stop flag after streaming completes
-        if stream_id and stream_id in self.stop_flags:
-            del self.stop_flags[stream_id]
+        self.unregister_stream(stream_id)

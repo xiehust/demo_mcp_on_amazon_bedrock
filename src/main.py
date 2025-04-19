@@ -146,7 +146,8 @@ async def initialize_user_servers(session: UserSession):
 
 async def get_or_create_user_session(
     request: Request,
-    auth: HTTPAuthorizationCredentials = Security(security)
+    auth: HTTPAuthorizationCredentials = Security(security),
+    create_new = True
 ):
     """获取或创建用户会话，优先使用X-User-ID头，并自动初始化用户服务器"""
     # 先验证API密钥
@@ -155,15 +156,18 @@ async def get_or_create_user_session(
     # 尝试从请求头获取用户ID，如果不存在则使用API密钥作为备用ID
     user_id = request.headers.get("X-User-ID", auth.credentials)
     
-    with session_lock:
-        is_new_session = user_id not in user_sessions
-        if is_new_session:
-            user_sessions[user_id] = UserSession(user_id)
-            logger.info(f"为用户 {user_id} 创建新会话: {user_sessions[user_id].session_id}")
+    # with session_lock:
+    is_new_session = user_id not in user_sessions
+    if not create_new and is_new_session:
+        return None
         
-        # 更新最后活跃时间
-        user_sessions[user_id].last_active = datetime.now()
-        session = user_sessions[user_id]
+    if is_new_session:
+        user_sessions[user_id] = UserSession(user_id)
+        logger.info(f"为用户 {user_id} 创建新会话: {user_sessions[user_id].session_id}")
+    
+    # 更新最后活跃时间
+    user_sessions[user_id].last_active = datetime.now()
+    session = user_sessions[user_id]
     
     # 如果是新会话，初始化用户的MCP服务器
     if is_new_session:
@@ -236,7 +240,7 @@ class ChatCompletionRequest(BaseModel):
     stream: Optional[bool] = None
     tools: Optional[List[dict]] = []
     options: Optional[dict] = {}
-    keep_alive: Optional[bool] = None
+    keep_session: Optional[bool] = False
     mcp_server_ids: Optional[List[str]] = []
 
 class ChatResponse(BaseModel):
@@ -350,6 +354,36 @@ async def list_mcp_server(
 # 将stop_router包含在主应用中, 注意这个顺序必须在接口定义之后
 app.include_router(list_router)
 
+@stop_router.post("/v1/remove/history")
+async def remove_history(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    auth: HTTPAuthorizationCredentials = Security(security)
+):
+    # 获取用户会话
+    session = await get_or_create_user_session(request, auth,create_new=False)
+    if not session:
+        # 没有找到session立即返回响应给客户端
+        return JSONResponse(
+            content={"errno": 0, "msg": "remove history from empty session"},
+            # 添加特殊的响应头，使浏览器不缓存此响应
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    else:
+        session.chat_client.clear_history()
+        return JSONResponse(
+            content={"errno": 0, "msg": "removed history"},
+            # 添加特殊的响应头，使浏览器不缓存此响应
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
 
 # 使用单独的路由器处理stop请求，以避免被streaming请求阻塞
 @stop_router.post("/v1/stop/stream/{stream_id}")
@@ -593,7 +627,7 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
             # 先在ChatClientStream中注册流，然后再添加到active_streams
             # session.chat_client.register_stream(stream_id)
             active_streams[stream_id] = session.user_id
-            logger.info(f"Stream {stream_id} registered for user {session.user_id}")
+            # logger.info(f"Stream {stream_id} registered for user {session.user_id}")
             logger.info(f"active_streams:{active_streams}")
         except Exception as e:
             logger.error(f"Error registering stream {stream_id}: {e}")
@@ -702,7 +736,6 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
     # bedrock's first turn cannot be assistant
     if messages and messages[0]['role'] == 'assistant':
         messages = messages[1:]
-
     try:
         current_content = ""
         thinking_start = False
@@ -714,12 +747,13 @@ async def stream_chat_response(data: ChatCompletionRequest, session: UserSession
                 model_id=data.model,
                 max_tokens=data.max_tokens,
                 temperature=data.temperature,
-                history=messages,
+                messages=messages,
                 system=system,
                 max_turns=MAX_TURNS,
                 mcp_clients=session.mcp_clients,
                 mcp_server_ids=data.mcp_server_ids,
                 extra_params=data.extra_params,
+                keep_session=data.keep_session,
                 stream_id=stream_id,
                 ):
             
@@ -852,6 +886,8 @@ async def chat_completions(
     session = await get_or_create_user_session(request, auth)
     # 记录会话活动
     session.last_active = datetime.now()
+
+    logger.info(f'keep_session:{data.keep_session}')
 
     if not data.messages:
         return JSONResponse(content=ChatResponse(
@@ -990,12 +1026,13 @@ async def chat_completions(
                 model_id=data.model,
                 max_tokens=data.max_tokens,
                 temperature=data.temperature,
-                history=messages,
+                messages=messages,
                 system=system,
                 max_turns=MAX_TURNS,
                 mcp_clients=session.mcp_clients,
                 mcp_server_ids=data.mcp_server_ids,
                 extra_params=data.extra_params,
+                keep_session=data.keep_session,
                 ):
             logger.info(f"response body for user {session.user_id}: {response}")
             is_tool_use = any([bool(x.get('toolUse')) for x in response['content']])
