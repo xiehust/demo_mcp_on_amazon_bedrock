@@ -154,7 +154,10 @@ class ChatClientStream(ChatClient):
         if mcp_clients is not None:
             for mcp_server_id in mcp_server_ids:
                 tool_config_response = await mcp_clients[mcp_server_id].get_tool_config(server_id=mcp_server_id)
-                tool_config['tools'].extend(tool_config_response["tools"])
+                if tool_config_response:
+                    tool_config['tools'].extend(tool_config_response["tools"])
+                else:
+                    yield {"type": "stopped", "data": {"message": f"Get tool config from {mcp_server_id} failed, please restart the MCP server"}}
         logger.info(f"Tool config: {tool_config}")
         
         use_client_pool = True if self.bedrock_client_pool else False
