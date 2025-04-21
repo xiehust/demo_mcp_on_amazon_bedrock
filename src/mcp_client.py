@@ -159,8 +159,13 @@ class MCPClient:
     async def get_tool_config(self, model_provider='bedrock', server_id : str = ''):
         """Get llm's tool usage config via MCP server"""
         # list tools via mcp server
-        response = await self.session.list_tools()
-        if not response:
+        try:
+            response = await self.session.list_tools()
+            if not response:
+                logger.error('list_tools returns empty')
+                raise ValueError('list_tools returns empty')
+        except Exception as e:
+            logger.error(f'{e}')
             return None
 
         # for bedrock tool config
