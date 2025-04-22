@@ -7,6 +7,7 @@
   
 - [20250418] 新增中国区硅基流动deepseek v3模型支持，新增sse server支持
   - 注意如果是升级安装，需要运行`uv sync`更新依赖环境
+  - .env中加入use_bedrock=0
 
 - Demo Vides
 ![alt text](assets/demo_videos.png)
