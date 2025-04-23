@@ -224,7 +224,9 @@ curl http://127.0.0.1:7002/v1/chat/completions \
 ```
 - 如果keep_session:true表示在服务器端保持session，服务器会保留历史消息和工具调用，客户端只需传入最新一轮的user message即可
 
-### 3.3  (🚀 New) React UI
+### 3.3 ChatBot UI 
+* 之前的streamlit UI 已经deprecated
+现在启用新版React UI
 - 🚀 基于Next.js 15和React 18构建的现代化前端，支持Dark/Light模式
 - 🎨 使用Tailwind CSS和Shadcn UI组件库实现美观的用户界面
 - 🔄 实时流式响应，提供流畅的对话体验
@@ -238,9 +240,8 @@ curl http://127.0.0.1:7002/v1/chat/completions \
 ![alt text](react_ui/image-1.png)
 
 
-
 #### ChatBot UI 
-待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:8502/)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
+待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:3000/chat)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
 由于已内置了文件系统操作、SQLite 数据库等 MCP Server，可以尝试连续提问以下问题进行体验：
 
 ```
@@ -429,6 +430,7 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 
 ## 6. Awsome MCPs
 - AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples
+- AWS Labs MCP Servers https://awslabs.github.io/mcp
 - https://github.com/punkpeye/awesome-mcp-servers
 - https://github.com/modelcontextprotocol/servers
 - https://www.aimcp.info/en

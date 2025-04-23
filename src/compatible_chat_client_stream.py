@@ -44,9 +44,12 @@ class CompatibleChatClientStream(ChatClient):
         self.client_index = 0
         self.stop_flags = {}  # Dict to track stop flags for streams
         # Initialize the OpenAI client
+        
         self.openai_client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base
+        ) if self.api_base else OpenAI(
+            api_key=self.api_key
         )
         
     def register_stream(self, stream_id):
@@ -348,7 +351,7 @@ class CompatibleChatClientStream(ChatClient):
         request_payload = {
             "model": model_id,
             "messages": openai_messages,
-            "max_tokens": max_tokens,
+            "max_completion_tokens": max_tokens,
             "temperature": temperature,
             "stream": True
         }
