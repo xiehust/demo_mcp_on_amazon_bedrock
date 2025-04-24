@@ -371,9 +371,7 @@ class CompatibleChatClient(ChatClient):
                         tool_results.append(result[0])
                         tool_text_results.append(result[1])
                         tool_results_serializable.append(result[2])
-                        
-                    logger.info(f'tool_text_results {tool_text_results}')
-                    
+                                            
                     # Process all tool call results
                     tool_results_content = []
                     for tool_result in tool_results:
@@ -387,14 +385,11 @@ class CompatibleChatClient(ChatClient):
                     }
                     messages.append(tool_result_message)
                     
-                    logger.info(f'bedrock:{messages}')
-
                     # Return tool use results
                     yield tool_result_message
                     
                     # Update OpenAI messages for the next request
                     openai_messages = self._convert_messages_to_openai_format(messages, system)
-                    logger.info(f'openai_messages:{openai_messages}')
 
                     request_payload["messages"] = openai_messages
                     
