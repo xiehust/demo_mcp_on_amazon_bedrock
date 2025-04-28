@@ -191,22 +191,21 @@ class ChatClientStream(ChatClient):
                     additionalModelRequestFields = additionalModelRequestFields
         )
         requestParams = {**requestParams, 'toolConfig': tool_config} if tool_config['tools'] else requestParams
-        cache_checkpoint = 0
-        if prompt_cache:
+        if prompt_cache and self.cache_checkpoint == 0:
             if 'toolConfig' in requestParams and prompt_cache_for_tool:
                 tools_str = json.dumps(requestParams['toolConfig']['tools'],ensure_ascii=False)
                 if len(tools_str) >= 5000:##will replace by token count in future
                     requestParams['toolConfig'] = {"tools":requestParams['toolConfig']['tools'] + [{"cachePoint": {"type": "default"}}]}
-                    cache_checkpoint += 1
-                    logger.info(f"add checkpoint number:{cache_checkpoint} for tool config")
+                    self.cache_checkpoint += 1
+                    self.reset_checkpoint += 1
+                    logger.info(f"add checkpoint number:{self.cache_checkpoint} for tool config")
             # Skip cache for system because it usually short.
             if len(system) > 0 and len(system[0]['text']) >= 5000: ##will replace by token count in future
                 requestParams['system'] = requestParams['system']+[{"cachePoint": {"type": "default"}}]
-                cache_checkpoint += 1
-                logger.info(f"add checkpoint number:{cache_checkpoint} for system prompt")
+                self.cache_checkpoint += 1
+                self.reset_checkpoint += 1
+                logger.info(f"add checkpoint number:{self.cache_checkpoint} for system prompt")
         
-        # Save the initial checkpoint num for reset 
-        reset_checkpoint = cache_checkpoint
         # Register this stream if an ID is provided
         if stream_id:
             self.register_stream(stream_id)
@@ -379,16 +378,16 @@ class ChatClientStream(ChatClient):
                                 "content": tool_results_content
                             }
                             if prompt_cache and tokens_need_cache >= cache_window:
-                                if cache_checkpoint < 4:
+                                if self.cache_checkpoint < 4:
                                     tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
-                                    cache_checkpoint += 1
-                                    logger.info(f"Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
+                                    self.cache_checkpoint += 1
+                                    logger.info(f"Write message cache: {tokens_need_cache}, checkpoint number :{self.cache_checkpoint}")
                                     tokens_need_cache = 0
                                 else: # reset checkpoint
                                     messages = remove_cache_checkpoint(messages)
                                     tool_result_message["content"] += [{"cachePoint": {"type": "default"}}]
-                                    cache_checkpoint = reset_checkpoint + 1
-                                    logger.info(f"Reset prompt cache checkpoint to {reset_checkpoint}, Write message cache: {tokens_need_cache}, checkpoint number :{cache_checkpoint}")
+                                    self.cache_checkpoint = self.reset_checkpoint + 1
+                                    logger.info(f"Reset prompt cache checkpoint to {self.reset_checkpoint}, Write message cache: {tokens_need_cache}, checkpoint number :{self.cache_checkpoint}")
                                     tokens_need_cache = 0
                                     
                             # output tool results

@@ -95,8 +95,12 @@ class UserSession:
     async def cleanup(self):
         """清理用户会话资源"""
         cleanup_tasks = []
-        for client_id, client in self.mcp_clients.items():
+        client_ids = list(self.mcp_clients.keys())
+        for client_id in client_ids:
+            client = self.mcp_clients[client_id]
             cleanup_tasks.append(client.cleanup())
+            self.mcp_clients.pop(client_id)
+
         if cleanup_tasks:
             await asyncio.gather(*cleanup_tasks)
             logger.info(f"用户 {self.user_id} 的 {len(cleanup_tasks)} 个MCP客户端已清理")
@@ -203,13 +207,16 @@ async def get_or_create_user_session(
     # 如果是新会话，初始化用户的MCP服务器
     if is_new_session:
         await initialize_user_servers(session)
+    elif not session.mcp_clients:# 如果用户的MCP服务器已经为空，则重新初始化
+        await initialize_user_servers(session)
+        
     
     return session
 
 async def cleanup_inactive_sessions():
     """定期清理不活跃的用户会话"""
     while True:
-        await asyncio.sleep(300)  # 每5分钟检查一次
+        await asyncio.sleep(10)  # 每10s检查一次
         current_time = datetime.now()
         inactive_users = []
         
@@ -414,6 +421,7 @@ async def remove_history(
         )
     else:
         session.chat_client.clear_history()
+        await session.cleanup()
         return JSONResponse(
             content={"errno": 0, "msg": "removed history"},
             # 添加特殊的响应头，使浏览器不缓存此响应
