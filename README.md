@@ -92,7 +92,15 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 
 ### 2.3 环境配置
 下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
-```bas
+```bash
+sudp apt update
+sudo apt-get install python3-pyaudio
+uv sync
+```
+
+如果是mac环境:  
+```bash
+brew install portaudio
 uv sync
 ```
 
