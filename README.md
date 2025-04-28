@@ -130,6 +130,7 @@ MCP_SERVICE_HOST=127.0.0.1
 MCP_SERVICE_PORT=7002
 API_KEY=123456
 MAX_TURNS=200
+INACTIVE_TIME=10
 #如果不使用dynamodb，则删除下面一行
 ddb_table=mcp_user_config_table
 EOF
@@ -152,6 +153,7 @@ MCP_SERVICE_HOST=127.0.0.1
 MCP_SERVICE_PORT=7002
 API_KEY=123456
 MAX_TURNS=200
+INACTIVE_TIME=10
 #不使用bedrock flag
 use_bedrock=0
 #如果不使用dynamodb，则删除下面一行
