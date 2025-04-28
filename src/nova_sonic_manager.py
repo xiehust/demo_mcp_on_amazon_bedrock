@@ -266,7 +266,7 @@ class BedrockStreamManager:
                         "sampleRateHertz": 24000,
                         "sampleSizeBits": 16,
                         "channelCount": 1,
-                        "voiceId": "matthew",
+                        "voiceId": f"{self.voice_id}",
                         "encoding": "base64",
                         "audioType": "SPEECH"
                     },
@@ -311,7 +311,7 @@ class BedrockStreamManager:
         }
         return json.dumps(tool_result_event)
     
-    def __init__(self, on_text_callback,on_processToolUse_callback,tools_config=[],model_id='amazon.nova-sonic-v1:0', region='us-east-1'):
+    def __init__(self, on_text_callback,processToolUse,voice_id,tools_config=[],model_id='amazon.nova-sonic-v1:0', region='us-east-1'):
         """Initialize the stream manager."""
         self.model_id = model_id
         self.region = region
@@ -319,13 +319,14 @@ class BedrockStreamManager:
         self.output_subject = Subject()
         self.audio_subject = Subject()
         self.on_text_callback = on_text_callback
-        self.processToolUse = on_processToolUse_callback
+        self.processToolUse = processToolUse
         self.response_task = None
         self.stream_response = None
         self.is_active = False
         self.barge_in = False
         self.bedrock_client = None
         self.scheduler = None
+        self.voice_id = voice_id
         self.tools_config = tools_config
         
         # Audio playback components
@@ -665,7 +666,7 @@ class BedrockStreamManager:
 class WebSocketAudioProcessor:
     """Handle real-time bidirectional audio processing for WebSocket connections using Nova Sonic"""
     
-    def __init__(self, user_id,mcp_clients,mcp_server_ids, model_id='amazon.nova-sonic-v1:0', region='us-east-1', websocket=None):
+    def __init__(self, user_id,mcp_clients,mcp_server_ids,voice_id, model_id='amazon.nova-sonic-v1:0', region='us-east-1', websocket=None):
         self.user_id = user_id
         self.model_id = model_id
         self.region = region
@@ -674,6 +675,7 @@ class WebSocketAudioProcessor:
         self.stream_manager = None
         self.is_streaming = False
         self.last_text = {"USER": "", "ASSISTANT": ""}
+        self.voice_id = voice_id
         
         # WebSocket reference for direct communication
         self.websocket = websocket
@@ -705,8 +707,9 @@ class WebSocketAudioProcessor:
             model_id=self.model_id, 
             region=self.region,
             on_text_callback = self.on_text_received,
-            on_processToolUse_callback = self.on_processToolUse_callback,
-            tools_config=tools_config
+            processToolUse = self.processToolUse,
+            tools_config=tools_config,
+            voice_id=self.voice_id
             # on_audio_callback=None  # We'll handle audio via the output task
         )
         
@@ -717,7 +720,7 @@ class WebSocketAudioProcessor:
         await self.start_streaming()
         return self
     
-    async def on_processToolUse_callback(self, toolName, toolUseContent):
+    async def processToolUse(self, toolName, toolUseContent):
         server_id, llm_tool_name = MCPClient.get_tool_name4mcp(toolName)
         try:
             tool_name, tool_args = toolName, json.loads(toolUseContent)
@@ -731,9 +734,10 @@ class WebSocketAudioProcessor:
             
             result = await mcp_client.call_tool(llm_tool_name, tool_args)
             result_content =  "\n".join([x.text for x in result.content if x.type == 'text'])
+            # result_content = [{"text": "\n".join([x.text for x in result.content if x.type == 'text'])}]
             # logger.info(f"call_tool result_content:{result_content}")
 
-            return result_content
+            return {'result':result_content}
         except Exception as err:
             err_msg = f"{toolName} tool call is failed. error:{err}"
             return {

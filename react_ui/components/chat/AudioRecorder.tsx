@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '../ui/button';
+import { Mars, Venus } from 'lucide-react';
 
 interface AudioRecorderProps {
   apiKey: string;
@@ -9,6 +10,9 @@ interface AudioRecorderProps {
   onToolUse?: (toolUse: any) => void;
   onToolResult?: (toolResult: any) => void;
 }
+
+// Voice type options
+type VoiceType = "matthew" | "tiffany" | "amy";
 
 // Define a type for our audio processor node that can be either modern or legacy
 type AudioProcessorNode = AudioWorkletNode | ScriptProcessorNode;
@@ -34,6 +38,53 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('Ready');
+  const [voiceType, setVoiceType] = useState<VoiceType>("matthew");
+    
+  // Function to handle voice type change
+  const handleVoiceChange = async (voice: VoiceType) => {
+    // If we're recording, don't allow voice change
+    if (isRecording) {
+      return;
+    }
+    
+    // Force immediate state update for UI
+    setVoiceType(prevVoice => {
+      return voice;
+    });
+    
+    // If connected, we need to disconnect and reconnect with new voice
+    if (isConnected) {
+      // Update status to inform user
+      setStatus(`Switching to ${voice} voice...`);
+      
+      // Disconnect WebSocket
+      disconnectWebSocket();
+      
+      // Wait for disconnection to complete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Reconnect with new voice - explicitly pass the voice parameter
+      try {
+        setIsConnecting(true);
+        const connected = await connectWebSocket(voice);
+        if (!connected) {
+          setError("Failed to reconnect with new voice");
+          setStatus("Connection failed");
+        } else {
+          setStatus(`Connected with ${voice} voice`);
+        }
+      } catch (err) {
+        console.error("Failed to reconnect after voice change:", err);
+        setError(`Connection error: ${err}`);
+        setStatus("Connection failed");
+      } finally {
+        setIsConnecting(false);
+      }
+    } else {
+      // Just update status if not connected
+      setStatus(`Selected ${voice} voice`);
+    }
+  };
   
   // Web Audio API 相关引用
   const websocketRef = useRef<WebSocket | null>(null);
@@ -236,69 +287,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
           setTimeout(() => playNextAudioChunk(), 10);
         }
       } 
-      // else {
-      //   // This is a Blob
-      //   try {
-      //     // Convert blob to array buffer
-      //     const blobArrayBuffer = await audioChunk.arrayBuffer();
-          
-      //     // Decode the audio data
-      //     const audioBuffer = await audioContextPlaybackRef.current.decodeAudioData(blobArrayBuffer);
-          
-      //     // Get channel data for processing
-      //     const channelData = audioBuffer.getChannelData(0);
-          
-      //     // Apply audio processing to improve quality
-      //     let processedData = channelData;
-      //     processedData = applyLowPassFilter(processedData);
-          
-      //     if (lastSampleRef.current) {
-      //       processedData = applyCrossfade(processedData, lastSampleRef.current);
-      //     }
-          
-      //     processedData = applyFades(processedData);
-      //     processedData = normalizeAudio(processedData);
-          
-      //     // Copy processed data back to the audio buffer
-      //     for (let i = 0; i < processedData.length; i++) {
-      //       channelData[i] = processedData[i];
-      //     }
-          
-      //     // Store the last part of this chunk for crossfading
-      //     const lastSampleSize = Math.min(crossfadeSamples, channelData.length);
-      //     lastSampleRef.current = new Float32Array(lastSampleSize);
-      //     for (let i = 0; i < lastSampleSize; i++) {
-      //       lastSampleRef.current[i] = channelData[channelData.length - lastSampleSize + i];
-      //     }
-          
-      //     // Create audio source and play
-      //     const source = audioContextPlaybackRef.current.createBufferSource();
-      //     source.buffer = audioBuffer;
-          
-      //     // Create a gain node and filter
-      //     const gainNode = audioContextPlaybackRef.current.createGain();
-      //     gainNode.gain.value = 0.9;
-          
-      //     const lowPassFilter = audioContextPlaybackRef.current.createBiquadFilter();
-      //     lowPassFilter.type = 'lowpass';
-      //     lowPassFilter.frequency.value = 8000;
-          
-      //     // Connect nodes
-      //     source.connect(lowPassFilter);
-      //     lowPassFilter.connect(gainNode);
-      //     gainNode.connect(audioContextPlaybackRef.current.destination);
-          
-      //     // Play the audio and chain to the next chunk when done
-      //     source.onended = () => {
-      //       setTimeout(() => playNextAudioChunk(), 5);
-      //     };
-          
-      //     source.start(0);
-      //   } catch (e) {
-      //     console.error('Failed to decode audio data:', e);
-      //     setTimeout(() => playNextAudioChunk(), 10);
-      //   }
-      // }
     } catch (e) {
       console.error('Error in audio playback:', e);
       setTimeout(() => playNextAudioChunk(), 10);
@@ -306,7 +294,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   };
   
   // 连接WebSocket
-  const connectWebSocket = (): Promise<boolean> => {
+  const connectWebSocket = (explicitVoice?: VoiceType): Promise<boolean> => {
     return new Promise((resolve) => {
     try {
       const serverUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:7002';
@@ -319,6 +307,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       if (serverIds.length > 0){
         wsUrl += `&mcp_server_ids=${serverIds}`;
       }
+      
+      // Use explicitly provided voice or fall back to state
+      const currentVoice = explicitVoice || voiceType;
+      // console.log(`Connecting with voice: ${currentVoice}`);
+      
+      // Add voice_id parameter to WebSocket URL
+      wsUrl += `&voice_id=${currentVoice}`;
       
       console.log('Connecting to WebSocket URL:', wsUrl);
       
@@ -485,6 +480,10 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       websocketRef.current = null;
       setIsConnected(false);
       setStatus('Disconnected');
+      
+      // Clear audio queue when disconnecting
+      audioQueueRef.current = [];
+      isPlayingRef.current = false;
     }
   };
   
@@ -686,8 +685,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         setIsConnecting(true);
         setStatus('Setting up connection...');
         
-        // 等待WebSocket连接建立
-        const connected = await connectWebSocket();
+        // 等待WebSocket连接建立 - explicitly pass current voice type
+        const connected = await connectWebSocket(voiceType);
         
         // 如果连接失败，抛出错误
         if (!connected) {
@@ -780,49 +779,122 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
         </div>
       )}
       
-      <div className="flex space-x-2">
-        {!isRecording ? (
-          <Button
-            onClick={startRecording}
-            disabled={isRecording || isConnecting}
-            className="bg-blue-500 hover:bg-blue-600 flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
-            </svg>
-            Start Recording
-          </Button>
-        ) : (
-          <Button 
-            onClick={stopRecording} 
-            className="bg-red-500 hover:bg-red-600 flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-            </svg>
-            Stop Recording
-          </Button>
-        )}
+      <div className="flex flex-col space-y-2">
+        <div className="mb-2">
+          <label className="text-sm font-medium mb-1 block">Voice:</label>
+          <div className="flex space-x-2">
+            <VoiceOption
+              id="matthew"
+              label="Matthew"
+              icon={<Mars className="h-4 w-4 text-blue-500" />}
+              selected={voiceType === "matthew"}
+              onClick={() => handleVoiceChange("matthew")}
+              disabled={isRecording}
+              key={`matthew-${voiceType === "matthew"}`}
+            />
+            <VoiceOption
+              id="tiffany"
+              label="Tiffany"
+              icon={<Venus className="h-4 w-4 text-pink-500" />}
+              selected={voiceType === "tiffany"}
+              onClick={() => handleVoiceChange("tiffany")}
+              disabled={isRecording}
+              key={`tiffany-${voiceType === "tiffany"}`}
+            />
+            <VoiceOption
+              id="amy"
+              label="Amy"
+              icon={<Venus className="h-4 w-4 text-purple-500" />}
+              selected={voiceType === "amy"}
+              onClick={() => handleVoiceChange("amy")}
+              disabled={isRecording}
+              key={`amy-${voiceType === "amy"}`}
+            />
+          </div>
+        </div>
         
-        {isConnected && (
-          <Button 
-            onClick={disconnectWebSocket} 
-            variant="outline"
-            className="flex items-center"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-            </svg>
-            Disconnect
-          </Button>
-        )}
+        <div className="flex space-x-2">
+          {!isRecording ? (
+            <Button
+              onClick={startRecording}
+              disabled={isRecording || isConnecting}
+              className="bg-blue-500 hover:bg-blue-600 flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7 4a3 3 0 016 0v4a3 3 0 11-6 0V4zm4 10.93A7.001 7.001 0 0017 8a1 1 0 10-2 0A5 5 0 015 8a1 1 0 00-2 0 7.001 7.001 0 006 6.93V17H6a1 1 0 100 2h8a1 1 0 100-2h-3v-2.07z" clipRule="evenodd" />
+              </svg>
+              Start
+            </Button>
+          ) : (
+            <Button
+              onClick={stopRecording}
+              className="bg-red-500 hover:bg-red-600 flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+              </svg>
+              Stop
+            </Button>
+          )}
+          
+          {isConnected && (
+            <Button
+              onClick={disconnectWebSocket}
+              variant="outline"
+              className="flex items-center"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+              Disconnect
+            </Button>
+          )}
+        </div>
       </div>
       
       {/* Helpful tip for users */}
       <div className="text-xs text-gray-500 italic">
-        Tip: Click "Start Recording" and speak. Nova Sonic will process your speech in real-time and respond with both text and voice.
+        Tip: Click "Start" and speak. Nova Sonic will process your speech in real-time and respond with both text and voice.
       </div>
     </div>
+  );
+};
+
+// Voice option component
+interface VoiceOptionProps {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  selected: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+const VoiceOption: React.FC<VoiceOptionProps> = ({
+  id,
+  label,
+  icon,
+  selected,
+  onClick,
+  disabled = false
+}) => {
+  return (
+    <button
+      id={`voice-${id}`}
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={`
+        flex items-center px-3 py-2 rounded-md transition-colors
+        ${selected
+          ? 'bg-blue-100 border border-blue-300 text-blue-700'
+          : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+      `}
+    >
+      <span className="mr-2">{icon}</span>
+      <span className="text-sm font-medium">{label}</span>
+    </button>
   );
 };
 

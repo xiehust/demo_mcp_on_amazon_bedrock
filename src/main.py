@@ -522,6 +522,12 @@ async def websocket_user_audio(websocket: WebSocket):
         # 获取客户端ID和认证令牌
         client_id = websocket.query_params.get("client_id", str(uuid.uuid4()))
         auth_token = websocket.query_params.get("token")
+        voice_id = websocket.query_params.get("voice_id","matthew")
+        
+        # 检查voice id
+        if voice_id not in ["matthew","tiffany","amy"]:
+            raise ValueError(f"voice_id {voice_id} not supported ")
+        
         mcp_server_ids = websocket.query_params.get("mcp_server_ids")
         mcp_server_ids = mcp_server_ids.split(',') if mcp_server_ids else []
         # 验证认证令牌
@@ -561,11 +567,12 @@ async def websocket_user_audio(websocket: WebSocket):
             "message": "WebSocket connected for Nova Sonic speech-to-speech processing"
         })        
         # 创建并初始化 Nova Sonic 音频处理器，传入WebSocket引用以启用全双工模式
-        logger.info(f"正在为用户 {user_id} 初始化 Nova Sonic 处理器")
+        logger.info(f"正在为用户 {user_id} 初始化 Nova Sonic 处理器 voice_id {voice_id}")
         audio_processor = WebSocketAudioProcessor(user_id = user_id, 
                                                   mcp_clients = user_session.mcp_clients,
                                                   mcp_server_ids= mcp_server_ids, 
                                                   model_id= model_id, 
+                                                  voice_id = voice_id,
                                                   region= region, 
                                                   websocket = websocket)
         await audio_processor.initialize()

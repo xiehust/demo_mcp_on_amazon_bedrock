@@ -26,7 +26,7 @@ export function MessageList({ isLoading = false }: MessageListProps) {
         <div className="flex items-center justify-center h-full">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-600 mb-4"></div>
-            <h3 className="text-lg font-medium">Loading MCP Servers...</h3>
+            <h3 className="text-lg font-medium">Preparing...</h3>
             <p className="text-sm text-gray-500 mt-2">
               Please wait while we connect to available MCP servers.
             </p>
