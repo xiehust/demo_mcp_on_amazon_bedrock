@@ -14,3 +14,4 @@ LOG_FILE="${LOG_DIR}/start_mcp_$(date +%Y%m%d_%H%M%S).log"
 lsof -t -i:$port | xargs kill -9 2> /dev/null
 python src/main.py --mcp-conf conf/config.json --user-conf conf/user_mcp_config.json \
     --host ${host} --port ${port} > ${LOG_FILE} 2>&1 &
+echo "Starting MCP service..."

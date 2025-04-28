@@ -25,7 +25,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from dotenv import load_dotenv
 import boto3
-from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks, Security
+from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks, Security, WebSocket, WebSocketDisconnect
 from utils import  (get_global_server_configs,
                     hash_filename,
                     save_global_server_config,
@@ -46,6 +46,8 @@ from chat_client_stream import ChatClientStream
 from compatible_chat_client_stream import CompatibleChatClientStream
 from mcp.shared.exceptions import McpError
 from fastapi import APIRouter
+from websocket_manager import connection_manager
+from nova_sonic_manager import WebSocketAudioProcessor
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,10 +100,40 @@ class UserSession:
             client = self.mcp_clients[client_id]
             cleanup_tasks.append(client.cleanup())
             self.mcp_clients.pop(client_id)
-        
+
         if cleanup_tasks:
             await asyncio.gather(*cleanup_tasks)
             logger.info(f"用户 {self.user_id} 的 {len(cleanup_tasks)} 个MCP客户端已清理")
+    
+    async def process_audio(self, audio_data: bytes):
+        """处理用户的音频数据"""
+        # 这里可以添加用户特定的音频处理逻辑
+        # 例如，可以将音频数据发送到Amazon Transcribe进行语音识别
+        # 或者将其存储起来以供后续处理
+        try:
+            # 示例：记录音频数据大小
+            logger.info(f"用户 {self.user_id} 处理音频数据: {len(audio_data)} 字节")
+            
+            # 实际项目中，这里应该调用语音识别API
+            # 例如：text = await call_transcribe_service(audio_data)
+            
+            # 模拟语音识别结果
+            # 在实际应用中，这里应该是真实的语音识别结果
+            recognized_text = "这是一个语音识别的示例结果"
+            
+            # 返回处理结果
+            return {
+                "status": "success",
+                "message": f"处理了 {len(audio_data)} 字节的音频数据",
+                "text": recognized_text
+            }
+        except Exception as e:
+            logger.error(f"用户 {self.user_id} 处理音频数据失败: {e}")
+            return {
+                "status": "error",
+                "message": f"处理音频数据失败: {str(e)}"
+            }
+
 
 
 async def get_api_key(auth: HTTPAuthorizationCredentials = Security(security)):
@@ -298,6 +330,13 @@ async def shutdown_event():
         for user_id, session in user_sessions.items():
             cleanup_tasks.append(session.cleanup())
     
+    # 清理所有WebSocket连接
+    try:
+        await connection_manager.close_all(code=1012, reason="Server shutdown")
+        logger.info("已关闭所有WebSocket连接")
+    except Exception as e:
+        logger.error(f"关闭WebSocket连接时出错: {e}")
+    
     if cleanup_tasks:
         await asyncio.gather(*cleanup_tasks)
         logger.info(f"已清理所有 {len(cleanup_tasks)} 个用户会话")
@@ -317,6 +356,7 @@ app.add_middleware(
 # 配置单独的路由组，确保停止路由不受streaming路由的并发限制影响
 stop_router = APIRouter()
 list_router = APIRouter()
+websocket_router = APIRouter()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -470,6 +510,124 @@ async def stop_stream(
 # 将stop_router包含在主应用中, 注意这个顺序必须在接口定义之后
 app.include_router(stop_router)
 
+
+@websocket_router.websocket("/user-audio")
+async def websocket_user_audio(websocket: WebSocket):
+    """WebSocket端点，用于处理已认证用户的音频数据并使用Nova Sonic进行实时语音转换"""
+    client_id = None
+    user_session = None
+    audio_processor = None
+    
+    try:
+        # 获取客户端ID和认证令牌
+        client_id = websocket.query_params.get("client_id", str(uuid.uuid4()))
+        auth_token = websocket.query_params.get("token")
+        mcp_server_ids = websocket.query_params.get("mcp_server_ids")
+        mcp_server_ids = mcp_server_ids.split(',') if mcp_server_ids else []
+        # 验证认证令牌
+        if auth_token != API_KEY:
+            await websocket.close(code=1008, reason="Unauthorized")
+            return
+        
+        # 获取区域和模型ID（可选参数）
+        region = websocket.query_params.get("region", "us-east-1")
+        model_id = websocket.query_params.get("model_id", "amazon.nova-sonic-v1:0")
+        logger.info(f'mcp_server_ids:{mcp_server_ids}')
+        # 获取或创建用户会话 (no longer accepting connection here - will be handled by connection_manager)
+        user_id = websocket.query_params.get("user_id", auth_token)
+        
+        # 获取用户会话
+        # 检查用户会话是否存在
+        if user_id in user_sessions:
+            user_session = user_sessions[user_id]
+            user_session.last_active = datetime.now()
+        else:
+            # 创建新会话
+            user_session = UserSession(user_id)
+            user_sessions[user_id] = user_session
+            logger.info(f"为WebSocket客户端 {client_id} 创建新用户会话: {user_id}")
+            
+            # 初始化用户的MCP服务器
+            await initialize_user_servers(user_session)
+        
+        # 注册连接到连接管理器
+        await connection_manager.connect(websocket, client_id)
+        
+        # 发送连接确认消息
+        await websocket.send_json({
+            "type": "connection_established",
+            "client_id": client_id,
+            "user_id": user_id,
+            "message": "WebSocket connected for Nova Sonic speech-to-speech processing"
+        })        
+        # 创建并初始化 Nova Sonic 音频处理器，传入WebSocket引用以启用全双工模式
+        logger.info(f"正在为用户 {user_id} 初始化 Nova Sonic 处理器")
+        audio_processor = WebSocketAudioProcessor(user_id = user_id, 
+                                                  mcp_clients = user_session.mcp_clients,
+                                                  mcp_server_ids= mcp_server_ids, 
+                                                  model_id= model_id, 
+                                                  region= region, 
+                                                  websocket = websocket)
+        await audio_processor.initialize()
+        # logger.info(f"成功初始化 Nova Sonic 处理器（双工模式）")
+        
+        # 告知客户端准备好接收音频
+        await websocket.send_json({
+            "type": "ready",
+            "message": "Nova Sonic model is ready for bidirectional audio processing"
+        })
+        
+        # 持续接收音频数据 - 只处理输入，输出由专门任务处理（双工模式）
+        while True:
+            # 接收二进制音频数据
+            audio_data = await websocket.receive_bytes()
+            
+            # 使用Nova Sonic处理输入音频数据（双工模式下，输出由单独的任务处理）
+            result = await audio_processor.process_input_audio(audio_data)
+            
+            # 在双工模式下，文本和音频响应由单独的任务直接发送到WebSocket
+            # 这里只需处理错误情况
+            if "status" in result and result["status"] == "error":
+                logger.warning(f"处理音频时发生错误: {result.get('message', 'Unknown error')}")
+                await websocket.send_json({
+                    "type": "error",
+                    "message": result.get("message", "处理音频时发生错误")
+                })
+            
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket客户端 {client_id} 断开连接")
+    except Exception as e:
+        logger.error(f"WebSocket错误: {e}")
+        # import traceback
+        # logger.error(traceback.format_exc())
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": f"处理错误: {str(e)}"
+            })
+        except:
+            pass
+    finally:
+        # 确保连接被清理 - 先处理连接清理，再处理处理器关闭
+        # 这样可以确保客户端断开连接时，先通知客户端，再清理资源
+        if client_id:
+            try:
+                await connection_manager.disconnect(client_id)
+            except Exception as e:
+                logger.error(f"清理WebSocket连接时出错: {e}")
+        
+        # 关闭Nova Sonic处理器
+        if audio_processor:
+            try:
+                await audio_processor.close()
+                logger.info(f"已关闭用户 {user_id} 的 Nova Sonic 处理器")
+            except Exception as e:
+                logger.error(f"关闭Nova Sonic处理器时出错: {e}")
+                # import traceback
+                # logger.debug(f"错误详情: {traceback.format_exc()}")
+
+# 将WebSocket路由器包含在主应用中
+app.include_router(websocket_router, prefix="/ws")
 
 
 @app.post("/v1/add/mcp_server")

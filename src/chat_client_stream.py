@@ -300,7 +300,6 @@ class ChatClientStream(ChatClient):
                             if 'text' in delta["delta"]['reasoningContent']:
                                 thinking_text += delta["delta"]['reasoningContent']["text"]
                             
-
                     # Handle tool use input in content block stop
                     if event["type"] == "block_stop":
                         if current_tooluse_input:
@@ -310,11 +309,9 @@ class ChatClientStream(ChatClient):
                                 current_tool_use["input"] = json.loads(current_tooluse_input)
                                 current_tooluse_input = ''
 
-
                     # Handle message stop and tool use
                     if event["type"] == "message_stop":     
                         stop_reason = event["data"]["stopReason"]
-                        
                         # Handle tool use if needed
                         if stop_reason == "tool_use" and tool_calls:
                             # 并行执行所有工具调用
@@ -369,7 +366,7 @@ class ChatClientStream(ChatClient):
                                 tool_results.append(result[0])
                                 tool_text_results.append(result[1])
                                 tool_results_serializable.append(result[2])
-                            logger.info(f'tool_text_results {tool_text_results}')
+                            logger.info(f'tool_text_results {tool_text_results[:100]}...')
                             # 处理所有工具调用的结果
                             tool_results_content = []
                             for tool_result in tool_results:
