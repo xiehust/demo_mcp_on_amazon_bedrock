@@ -674,6 +674,12 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     try {
       // Clear audio queue when starting recording
       audioQueueRef.current = [];
+
+      // Check if mediaDevices API is available
+      if (!navigator.mediaDevices) {
+        // Fallback for older browsers or non-secure contexts
+        throw new Error('MediaDevices API not available. Please ensure you are using a modern browser with HTTPS.');
+      }
       
       // 请求麦克风权限
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

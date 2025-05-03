@@ -94,7 +94,7 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
 ```bash
 sudp apt update
-sudo apt-get install python3-pyaudio
+sudo apt-get install portaudio19-dev
 uv sync
 ```
 
@@ -250,7 +250,7 @@ curl http://127.0.0.1:7002/v1/chat/completions \
 ![alt text](react_ui/image-1.png)
 
 
-#### ChatBot UI 
+#### ChatBot UI (Deprecated)
 待启动后，可查看日志 `logs/start_chatbot.log` 确认无报错，然后浏览器打开[服务地址](http://localhost:3000/chat)，即可体验 MCP 增强后的 Bedrock 大模型 ChatBot 能力。
 由于已内置了文件系统操作、SQLite 数据库等 MCP Server，可以尝试连续提问以下问题进行体验：
 
