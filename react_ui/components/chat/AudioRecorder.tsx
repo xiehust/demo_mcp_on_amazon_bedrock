@@ -299,7 +299,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
     try {
       const serverUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:7002';
       // 将http/https转换为ws/wss
-      const wsBase = serverUrl.replace(/^http/, 'ws');
+      const wsBase = serverUrl.replace(/^https?/, (match) => match === 'https' ? 'wss' : 'ws');
       
       let wsUrl = `${wsBase}/ws/user-audio?token=${apiKey}&user_id=${userId}&client_id=${userId}`;
       
@@ -678,7 +678,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
       // Check if mediaDevices API is available
       if (!navigator.mediaDevices) {
         // Fallback for older browsers or non-secure contexts
-        throw new Error('MediaDevices API not available. Please ensure you are using a modern browser with HTTPS.');
+        throw new Error('MediaDevices API not available. This feature requires HTTPS. Please see HTTPS_SETUP.md for instructions on enabling HTTPS for local development.');
       }
       
       // 请求麦克风权限

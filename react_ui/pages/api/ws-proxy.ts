@@ -2,6 +2,10 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import httpProxy from 'http-proxy';
 import { IncomingMessage, ServerResponse, ClientRequest } from 'http';
 
+// Disable certificate validation for WebSocket connections to HTTP backend
+// This is safe because we're making the request from the server side
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 // This is required for WebSocket proxying
 export const config = {
   api: {
@@ -15,7 +19,8 @@ const proxy = httpProxy.createProxyServer();
 // This handler will proxy WebSocket connections to the backend server
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // Get the target URL from environment variable, same as other API routes
-  const baseTarget = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
+  // Ensure we're using HTTP, not HTTPS for the backend
+  const baseTarget = (process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002').replace(/^https:/, 'http:');
   
   // Get the WebSocket path from query parameters
   const wsPath = req.query.path as string || '/ws/user-audio';
@@ -75,6 +80,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       target,
       ws: true, // Enable WebSocket support
       changeOrigin: true,
+      secure: false, // Allow insecure connections (HTTP backend from HTTPS frontend)
     }, (err: Error | undefined) => {
       if (err) {
         console.error('Failed to proxy request:', err);

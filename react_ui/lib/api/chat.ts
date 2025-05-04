@@ -4,13 +4,20 @@ import { Message } from '../store/chatStore';
 export const getBaseUrl = () => {
   // Check if we're running on the server or client
   if (typeof window === 'undefined') {
-    // Server-side: use internal URL
-    return process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
+    // Server-side: use internal URL - ensure HTTP protocol
+    const baseUrl = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
+    return baseUrl.replace(/^https:/, 'http:');
   } else {
     // Client-side: use public URL
     return process.env.NEXT_PUBLIC_MCP_BASE_URL || '';
   }
 };
+
+// Configure fetch to ignore SSL errors when connecting to HTTP backend from HTTPS frontend
+// This is safe because we're making the request from the server side
+if (typeof window === 'undefined') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 

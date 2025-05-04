@@ -25,6 +25,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+react_ui/certificates/
 .next
 node_modules
 # PyInstaller
