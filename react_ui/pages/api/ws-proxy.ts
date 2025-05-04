@@ -19,8 +19,8 @@ const proxy = httpProxy.createProxyServer();
 // This handler will proxy WebSocket connections to the backend server
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // Get the target URL from environment variable, same as other API routes
-  // Ensure we're using HTTP, not HTTPS for the backend
-  const baseTarget = (process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002').replace(/^https:/, 'http:');
+  // Use the protocol specified in SERVER_MCP_BASE_URL
+  const baseTarget = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
   
   // Get the WebSocket path from query parameters
   const wsPath = req.query.path as string || '/ws/user-audio';

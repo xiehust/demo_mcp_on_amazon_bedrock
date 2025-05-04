@@ -5,7 +5,7 @@ import fetch from 'node-fetch';
 // Using localhost works with both direct deployment and Docker with host network mode
 const MCP_BASE_URL = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
 
-// Configure fetch to ignore SSL errors when connecting to HTTP backend from HTTPS frontend
+// Configure fetch to ignore SSL errors for self-signed certificates
 // This is safe because we're making the request from the server side
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
@@ -36,8 +36,8 @@ export async function proxyGetRequest(
   endpoint: string
 ) {
   try {
-    // Construct backend URL - ensure we're using HTTP, not HTTPS
-    const url = MCP_BASE_URL.replace(/^https:/, 'http:') + endpoint;
+    // Construct backend URL - use the protocol specified in MCP_BASE_URL
+    const url = MCP_BASE_URL + endpoint;
     
     // Make the request to the backend
     const response = await fetch(url, {
@@ -65,8 +65,8 @@ export async function proxyPostRequest(
   endpoint: string
 ) {
   try {
-    // Construct backend URL - ensure we're using HTTP, not HTTPS
-    const url = MCP_BASE_URL.replace(/^https:/, 'http:') + endpoint;
+    // Construct backend URL - use the protocol specified in MCP_BASE_URL
+    const url = MCP_BASE_URL + endpoint;
     
     // Make the request to the backend
     const response = await fetch(url, {
@@ -165,8 +165,8 @@ export async function proxyDeleteRequest(
   endpoint: string
 ) {
   try {
-    // Construct backend URL - ensure we're using HTTP, not HTTPS
-    const url = MCP_BASE_URL.replace(/^https:/, 'http:') + endpoint;
+    // Construct backend URL - use the protocol specified in MCP_BASE_URL
+    const url = MCP_BASE_URL + endpoint;
     
     // Make the request to the backend
     const response = await fetch(url, {

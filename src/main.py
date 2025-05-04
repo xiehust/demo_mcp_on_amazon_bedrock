@@ -1268,14 +1268,53 @@ async def chat_completions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def generate_self_signed_cert(cert_dir='certificates'):
+    """生成自签名证书用于HTTPS开发环境"""
+    import subprocess
+    
+    # 创建证书目录
+    if not os.path.exists(cert_dir):
+        os.makedirs(cert_dir, exist_ok=True)
+        logger.info(f"创建证书目录: {cert_dir}")
+    
+    key_path = os.path.join(cert_dir, 'localhost.key')
+    cert_path = os.path.join(cert_dir, 'localhost.crt')
+    
+    # 检查证书是否已存在
+    if os.path.exists(key_path) and os.path.exists(cert_path):
+        logger.info("证书已存在，将使用现有证书")
+        return key_path, cert_path
+    
+    # 生成新的私钥和证书
+    logger.info("正在为localhost生成自签名证书...")
+    try:
+        subprocess.run([
+            'openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+            '-sha256', '-days', '365', '-subj', '/CN=localhost',
+            '-keyout', key_path, '-out', cert_path
+        ], check=True)
+        
+        logger.info(f"证书生成成功! 私钥: {key_path}, 证书: {cert_path}")
+        return key_path, cert_path
+    except subprocess.CalledProcessError as e:
+        logger.error(f"生成证书时出错: {e}")
+        return None, None
+    except FileNotFoundError:
+        logger.error("未找到OpenSSL。请安装OpenSSL以生成证书。")
+        return None, None
+
 if __name__ == '__main__':
     import uvicorn
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', default='127.0.0.1')
     parser.add_argument('--port', type=int, default=7002)
     parser.add_argument('--mcp-conf', default='', help="the mcp servers json config file")
-    parser.add_argument('--user-conf', default='conf/user_mcp_configs.json', 
+    parser.add_argument('--user-conf', default='conf/user_mcp_configs.json',
                        help="用户MCP服务器配置文件路径")
+    parser.add_argument('--https', action='store_true', help="启用HTTPS")
+    parser.add_argument('--cert-dir', default='certificates', help="证书目录")
+    parser.add_argument('--ssl-keyfile', default='', help="SSL密钥文件路径")
+    parser.add_argument('--ssl-certfile', default='', help="SSL证书文件路径")
     args = parser.parse_args()
     
     # 设置用户配置文件路径环境变量
@@ -1297,7 +1336,38 @@ if __name__ == '__main__':
                 # 加载模型配置
                 for model_conf in conf.get('models', []):
                     llm_model_list[model_conf['model_id']] = model_conf['model_name']
-        config = uvicorn.Config(app, host=args.host, port=args.port, loop=loop)
+        
+        # 配置HTTPS
+        ssl_keyfile = None
+        ssl_certfile = None
+        
+        if args.https:
+            if args.ssl_keyfile and args.ssl_certfile:
+                ssl_keyfile = args.ssl_keyfile
+                ssl_certfile = args.ssl_certfile
+                logger.info(f"使用指定的SSL证书: {ssl_certfile} 和密钥: {ssl_keyfile}")
+            else:
+                ssl_keyfile, ssl_certfile = generate_self_signed_cert(args.cert_dir)
+                if not ssl_keyfile or not ssl_certfile:
+                    logger.warning("无法生成SSL证书，将使用HTTP而非HTTPS")
+        
+        # 配置uvicorn
+        config_kwargs = {
+            "app": app,
+            "host": args.host,
+            "port": args.port,
+            "loop": loop
+        }
+        
+        # 如果启用HTTPS且有有效证书，添加SSL配置
+        if args.https and ssl_keyfile and ssl_certfile:
+            config_kwargs["ssl_keyfile"] = ssl_keyfile
+            config_kwargs["ssl_certfile"] = ssl_certfile
+            logger.info(f"启用HTTPS，服务器将在 https://{args.host}:{args.port} 上运行")
+        else:
+            logger.info(f"使用HTTP，服务器将在 http://{args.host}:{args.port} 上运行")
+        
+        config = uvicorn.Config(**config_kwargs)
         server = uvicorn.Server(config)
         loop.run_until_complete(server.serve())
     finally:

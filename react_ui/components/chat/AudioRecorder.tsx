@@ -297,9 +297,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const connectWebSocket = (explicitVoice?: VoiceType): Promise<boolean> => {
     return new Promise((resolve) => {
     try {
-      const serverUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:7002';
-      // 将http/https转换为ws/wss
-      const wsBase = serverUrl.replace(/^https?/, (match) => match === 'https' ? 'wss' : 'ws');
+      // 使用当前页面的协议（HTTP或HTTPS）来确定WebSocket协议（WS或WSS）
+      const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const protocol = isSecure ? 'wss:' : 'ws:';
+      const host = process.env.NEXT_PUBLIC_API_BASE_URL || 'localhost:7002';
+      
+      // 构建WebSocket URL，确保使用正确的协议
+      const wsBase = `${protocol}//${host.replace(/^https?:\/\//, '')}`;
       
       let wsUrl = `${wsBase}/ws/user-audio?token=${apiKey}&user_id=${userId}&client_id=${userId}`;
       

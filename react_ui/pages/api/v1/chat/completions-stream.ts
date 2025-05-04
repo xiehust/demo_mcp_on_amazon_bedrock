@@ -2,10 +2,10 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { Readable, Transform } from 'stream';
 
 // Base URL for the MCP service (internal server-side only)
-// Ensure we're using HTTP, not HTTPS for the backend
-const MCP_BASE_URL = (process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002').replace(/^https:/, 'http:');
+// Use the protocol specified in SERVER_MCP_BASE_URL
+const MCP_BASE_URL = process.env.SERVER_MCP_BASE_URL || 'http://localhost:7002';
 
-// Configure fetch to ignore SSL errors when connecting to HTTP backend from HTTPS frontend
+// Configure fetch to ignore SSL errors for self-signed certificates
 // This is safe because we're making the request from the server side
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
