@@ -16,10 +16,10 @@ if [ "${USE_HTTPS}" = "1" ] || [ "${USE_HTTPS}" = "true" ]; then
     PROTOCOL="https"
     HTTPS_ARGS="--https"
     # Check if certificates exist, if not generate them
-    if [ ! -f "certificates/localhost.key" ] || [ ! -f "certificates/localhost.crt" ]; then
-        echo "Generating certificates for HTTPS..."
-        ./generate_certs.sh
-    fi
+    # if [ ! -f "certificates/localhost.key" ] || [ ! -f "certificates/localhost.crt" ]; then
+    #     echo "Generating certificates for HTTPS..."
+    #     ./generate_certs.sh
+    # fi
 else
     PROTOCOL="http"
     HTTPS_ARGS=""
