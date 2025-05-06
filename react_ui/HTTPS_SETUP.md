@@ -17,15 +17,17 @@ NEXT_PUBLIC_MCP_BASE_URL=/api
 NEXT_PUBLIC_API_BASE_URL=https://<ip>:7002
 ```
 
+
+#### Container Mode:
+```bash
+docker-compose up mcpui-https -d
+```
+
 #### Development Mode:
 ```bash
 npm run dev:https
 ```
 
-#### Production Mode:
-```bash
-npm run build
-npm run start:https
-```
+
 
 

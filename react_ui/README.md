@@ -74,7 +74,7 @@ NEXT_PUBLIC_MCP_BASE_URL=/api
 docker-compose up -d
 ```
 
-5. 在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat)
+5. 如果是本地部署，则在浏览器中访问 [http://localhost:3000/chat](http://localhost:3000/chat) 如果在ec2部署，则访问ec2 ip
 
 - 其他Docker常用命令
 ```bash
