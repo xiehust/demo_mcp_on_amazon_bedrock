@@ -1,6 +1,6 @@
 # MCP on Amazon Bedrock[[English Readme](./README.en.md)]
 ### 更新日志
-- [20250507] 增加Nova Sonic 语音Agent模式，见第6节介绍
+- [20250507] 新增Nova Premier和Nova Sonic 语音Agent模式，见第6节介绍
  - ⚠️ 如果在ec2部署，需要使用[HTTPS方式部署](HTTPS_SETUP.md)，如果在本地则沿用之前的部署方式.
 
 - [20250419] Keep Server Session 功能，可以在服务器端保存session所有历史消息，包括（Tool use历史）
