@@ -1,5 +1,8 @@
 # MCP on Amazon Bedrock[[English Readme](./README.en.md)]
 ### 更新日志
+- [20250507] 增加Nova Sonic 语音Agent模式，见第6节介绍
+ - ⚠️ 如果在ec2部署，需要使用[HTTPS方式部署](HTTPS_SETUP.md)，如果在本地则沿用之前的部署方式.
+
 - [20250419] Keep Server Session 功能，可以在服务器端保存session所有历史消息，包括（Tool use历史）
   - UI开启方法：UI上通过`Keep Session on Server`开关控制,点击`Clear Conversion`时，会向服务端发起`v1/remove/history`请求清空服务器session消息。
   - 如果直接使用服务端接口，在ChatCompletionRequest中加入keep_session=True,表示在服务端保存，messages中只需要传入system和最新的user 即可，无须再传入历史消息。
@@ -65,7 +68,7 @@
 - 该项目目前仍在不断探索完善，MCP 正在整个社区蓬勃发展，欢迎大家一起关注！
 
 ## 1. 项目特点：
-   - 同时支持Amazon Nova Pro和Claude Sonnet模型
+   - 同时支持Amazon Nova 和Claude Sonnet模型, 以及其他OPENAI接口兼容的模型
    - 与Anthropic官方MCP标准完全兼容，可以采用同样的方式，直接使用社区的各种[MCP servers](https://github.com/modelcontextprotocol/servers/tree/main)
    - 将MCP能力和客户端的解耦，MCP能力封装在服务端，对外提供API服务，且chat接口兼容openai，方便接入其他chat客户端
    - 前后端分离，MCP Client和MCP Server均可以部署到服务器端，用户可以直接使用web浏览器通过后端web服务交互，从而访问LLM和MCP Sever能力和资源  
@@ -141,6 +144,7 @@ MAX_TURNS=200
 INACTIVE_TIME=10
 #如果不使用dynamodb，则删除下面一行
 ddb_table=mcp_user_config_table
+USE_HTTPS=0
 EOF
 ```
 
@@ -166,6 +170,7 @@ INACTIVE_TIME=10
 use_bedrock=0
 #如果不使用dynamodb，则删除下面一行
 ddb_table=mcp_user_config_table
+USE_HTTPS=0
 EOF
 ```
 
@@ -178,11 +183,15 @@ EOF
     }
 ```
 
+
 ## 3. 运行
 
-### 3.1 该项目包含1个后端服务和一个streamlit 前端， 前后端通过rest api对接：
+### 3.1 该项目包含1个后端服务和一个React UI前端， 前后端通过rest api对接：
 - **Chat 接口服务（Bedrock+MCP）**，可对外提供 Chat 接口、同时托管多个 MCP server、支持历史多轮对话输入、响应内容附加了工具调用中间结果、暂不支持流式响应
-- **ChatBot UI**，跟上述 Chat 接口服务通信，提供多轮对话、管理 MCP 的 Web UI 演示服务
+- **Web UI**，跟上述 Chat 接口服务通信，提供多轮对话、管理 MCP 的 Web UI 演示服务
+
+### 3.2 (可选)HTTPS方式启动
+参考 [HTTPS_SETUP](./HTTPS_SETUP.md)
 
 ### 3.2 Chat 接口服务（Bedrock+MCP）
 - 接口服务可以对外提供给独立API，接入其他chat客户端, 实现服务端MCP能力和客户端的解耦
@@ -234,7 +243,7 @@ curl http://127.0.0.1:7002/v1/chat/completions \
 ```
 - 如果keep_session:true表示在服务器端保持session，服务器会保留历史消息和工具调用，客户端只需传入最新一轮的user message即可
 
-### 3.3 ChatBot UI 
+### 3.3 Web UI 
 * 之前的streamlit UI 已经deprecated
 现在启用新版React UI
 - 🚀 基于Next.js 15和React 18构建的现代化前端，支持Dark/Light模式
@@ -438,7 +447,13 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 }
 ```
 
-## 6. Awsome MCPs
+## 6. 语音Agent + MCP
+- ⚠️ 如果在ec2部署，需要使用[HTTPS方式部署](HTTPS_SETUP.md)，如果在本地则沿用之前的部署方式.
+- 点击小话筒，可以体验端到端语音Agent模式，在该模式下，使用的是[Nova Sonic Speech 2 Speech模型](https://docs.aws.amazon.com/nova/latest/userguide/speech.html)，目前仅支持英文对话和三种音色输出。
+Nova Sonic模型支持Function call，所以也能添加MCP server，例如，开启tavily search 和 time mcp server之后，语音输出问“what is the weather of beijing”。可以看到Nova Sonic模型会监听话筒，并直接在输出语音回复，并同时把语音输入和输出转成文字显示到对话框中  
+![alt text](assets/sonic_1.png)
+
+## 7. Awsome MCPs
 - AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples
 - AWS Labs MCP Servers https://awslabs.github.io/mcp
 - https://github.com/punkpeye/awesome-mcp-servers

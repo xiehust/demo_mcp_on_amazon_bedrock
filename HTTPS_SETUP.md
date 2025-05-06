@@ -80,13 +80,13 @@ python src/main.py --https --ssl-keyfile /path/to/your/key.pem --ssl-certfile /p
 NEXT_PUBLIC_API_KEY=123456
 
 # Base URL for MCP service - Server side (internal)
-# 使用与后端相同的协议（HTTP 或 HTTPS）
+# 使用与后端相同的协议（HTTP 或 HTTPS，这里始终保持localhost即可，不用更换其他ip）
 SERVER_MCP_BASE_URL=https://localhost:7002
 
 # Base URL for MCP service - Client side (now uses Next.js API routes)
 NEXT_PUBLIC_MCP_BASE_URL=/api
 
-# Base URL for direct client-side API access (used for WebSockets)
+# Base URL for direct client-side API access (用于WebSockets，如果是在ec2部署，这里要替换成ec2 ip)
 NEXT_PUBLIC_API_BASE_URL=https://<ec2_ip>:7002
 ```
 
@@ -94,14 +94,17 @@ NEXT_PUBLIC_API_BASE_URL=https://<ec2_ip>:7002
    - `SERVER_MCP_BASE_URL`：用于服务器端API请求
    - `NEXT_PUBLIC_API_BASE_URL`：用于WebSocket连接和客户端直接API请求
 
-3. 如果您使用 `start_all.sh` 脚本启动应用程序，这些环境变量将根据 `.env` 文件中的 `USE_HTTPS` 设置自动配置。
+3. 如果您使用 `start_all.sh` 脚本启动应用程序，请更改`.env` 文件中的 `USE_HTTPS=1`。
 
-### 6. 访问应用程序
+### 6. 启动访问UI
+在`react_ui`目录中运行：
+```
+
+```
 
 打开浏览器并导航至：
 ```
-https://<ec2_ip>:7002  # 后端 API
-https://<ec2_ip>:3000  # React UI 前端
+https://<ec2_ip>:3000/chat  # React UI 前端
 ```
 
 注意：您可能会看到关于证书是自签名的浏览器警告。对于本地开发，您可以通过点击"高级"，然后"继续前往 localhost（不安全）"安全地继续。由于前端和后端使用相同的证书，一旦您信任了一个服务的证书，另一个服务也会被自动信任。
