@@ -99,7 +99,7 @@ NEXT_PUBLIC_API_BASE_URL=https://<ec2_ip>:7002
 ### 6. 启动访问UI
 在`react_ui`目录中运行：
 ```
-
+docker-compose up mcpui-https -d
 ```
 
 打开浏览器并导航至：
