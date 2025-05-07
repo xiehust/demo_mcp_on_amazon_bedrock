@@ -96,7 +96,7 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 ### 2.3 环境配置
 下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
 ```bash
-sudp apt update
+sudo apt update
 sudo apt-get install portaudio19-dev
 uv sync
 ```
@@ -122,11 +122,9 @@ aws dynamodb create-table \
 ```
 ### 2.4 配置编辑（海外区使用Bedrock）
 > Tips: 如何需要配置多个账号ak/sk, 使用轮询机制，可以在conf/目录下增加一个`credential.csv`, 列名分别为**ak**，**sk**， 填入多个ak/sk即可，例如: 
-  
-| ak | sk |  
-| ----- | ----- |  
-| ak 1 | sk 1 |  
-| ak 2 | sk 2 |  
+ak,sk  
+ak1,sk1  
+ak2,sk2  
 
 运行以下命令创建.env 文件， **请修改AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_REGION等信息之后再运行**  
 
