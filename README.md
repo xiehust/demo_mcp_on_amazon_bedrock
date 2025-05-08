@@ -8,7 +8,7 @@
   - 如果直接使用服务端接口，在ChatCompletionRequest中加入keep_session=True,表示在服务端保存，messages中只需要传入system和最新的user 即可，无须再传入历史消息。
   - 如果要清空服务器端历史，需要发起`POST v1/remove/history`请求
   
-- [20250418] 新增中国区硅基流动deepseek v3模型支持，新增sse server支持
+- [20250418] 新增中国区硅基流动deepseek v3,Qwen3模型支持，新增sse server支持
   - 注意如果是升级安装，需要运行`uv sync`更新依赖环境
   - .env中加入use_bedrock=0
 
@@ -176,13 +176,25 @@ USE_HTTPS=0
 EOF
 ```
 
-默认配置支持`DeepSeek-V3`, 如果需要支持其他模型（必须是支持tool use的模型），请自行修改[conf/config.json](conf/config.json)配置加入模型，例如：
+默认配置支持`DeepSeek-V3`,`Qwen3`等模型, 如果需要支持其他模型（必须是支持tool use的模型），请自行修改[conf/config.json](conf/config.json)配置加入模型，例如：
 
 ```json
-		{
-			"model_id": "Pro/deepseek-ai/DeepSeek-V3",
-			"model_name": "DeepSeek-V3-Pro"
-    }
+  {
+    "model_id": "Qwen/Qwen3-235B-A22B",
+    "model_name": "Qwen3-235B-A22B"
+  },
+  {
+    "model_id": "Qwen/Qwen3-30B-A3B",
+    "model_name": "Qwen3-30B-A3B"
+  },
+  {
+    "model_id": "Pro/deepseek-ai/DeepSeek-V3",
+    "model_name": "DeepSeek-V3-Pro"
+  },
+  {
+    "model_id": "deepseek-ai/DeepSeek-V3",
+    "model_name": "DeepSeek-V3-free"
+  }
 ```
 
 
