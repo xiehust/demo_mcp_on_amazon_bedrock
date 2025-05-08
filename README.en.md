@@ -150,12 +150,24 @@ ddb_table=mcp_user_config_table
 USE_HTTPS=0
 EOF
 ```
-Default configuration supports `DeepSeek-V3`. If you need to support other models (must be models that support tool use), please modify the [conf/config.json](conf/config.json) configuration to add models, for example:
+Default configuration supports `DeepSeek-V3` and `Qwen3`. If you need to support other models (must be models that support tool use), please modify the [conf/config.json](conf/config.json) configuration to add models, for example:
 ```json
-		{
-			"model_id": "Pro/deepseek-ai/DeepSeek-V3",
-			"model_name": "DeepSeek-V3-Pro"
-    }
+  {
+    "model_id": "Qwen/Qwen3-235B-A22B",
+    "model_name": "Qwen3-235B-A22B"
+  },
+  {
+    "model_id": "Qwen/Qwen3-30B-A3B",
+    "model_name": "Qwen3-30B-A3B"
+  },
+  {
+    "model_id": "Pro/deepseek-ai/DeepSeek-V3",
+    "model_name": "DeepSeek-V3-Pro"
+  },
+  {
+    "model_id": "deepseek-ai/DeepSeek-V3",
+    "model_name": "DeepSeek-V3-free"
+  }
 ```
 ## 3. Running
 ### 3.1 This project includes 1 backend service and a streamlit frontend, with front and back ends connected via REST API:
