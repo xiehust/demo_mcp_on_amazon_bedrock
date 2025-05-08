@@ -27,6 +27,10 @@
 - **本Demo方案架构**
 ![arch](assets/arch.png)
 
+- **Deepwiki** 
+
+https://deepwiki.com/aws-samples/demo_mcp_on_amazon_bedrock/1.1-system-architecture
+
 - **核心组件**
 ![alt text](assets/core_comp.png)   
    1. MCP客户端(mcp_client.py)

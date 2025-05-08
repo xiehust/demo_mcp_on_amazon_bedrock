@@ -20,6 +20,11 @@
 - This project provides ChatBot interaction services based on Nova, Claude, and other large models in **Bedrock**, while introducing **MCP** to greatly enhance and extend the application scenarios of ChatBot-form products, supporting seamless integration with local file systems, databases, development tools, internet searches, etc. If a ChatBot containing a large model is equivalent to a brain, then introducing MCP is like equipping it with arms and legs, truly making the large model move and connect with various existing systems and data.
 - **This Demo Solution Architecture**
 ![arch](assets/arch.png)  
+
+- **Deepwiki** 
+
+https://deepwiki.com/aws-samples/demo_mcp_on_amazon_bedrock/1.1-system-architecture
+
 - **Core Components**
 
 ![alt text](assets/core_comp.png)  
