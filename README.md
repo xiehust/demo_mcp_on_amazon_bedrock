@@ -20,7 +20,7 @@
 ![alt text](assets/mcp_how.png)  
 
 - 基于AWS的MCP企业架构设计思路  
-![alt text](assets/image-aws-arch.png)
+![alt text](assets/image-aws-arch.png) 
 
 - 本项目提供基于 **Bedrock** 中Nova,Claude等大模型的 ChatBot 交互服务，同时引入 **MCP**，极大增强并延伸 ChatBot 形态产品的应用场景，可支持本地文件系统、数据库、开发工具、互联网检索等无缝接入。如果说包含大模型的 ChatBot 相当于大脑的话，那引入 MCP 后就相当于装上了胳膊腿，真正让大模型动起来、跟各种现存系统和数据联通。  
 
@@ -28,7 +28,7 @@
 ![arch](assets/arch.png)
 
 - **核心组件**
-![alt text](assets/core_comp.png)  
+![alt text](assets/core_comp.png)   
    1. MCP客户端(mcp_client.py)
       - 负责管理与多个MCP服务器的连接
       - 处理工具调用和资源访问
@@ -41,8 +41,8 @@
       - 提供FastAPI服务,暴露聊天和MCP管理API
       - 管理用户会话和MCP服务器配置
       - 处理并发请求和资源清理
-   4. Web界面(chatbot.py)
-      - 基于Streamlit的用户界面
+   4. Frontend(React UI)
+      - 基于React的用户界面
       - 允许用户与模型交互并管理MCP服务器
       - 显示工具调用结果和思考过程
 
@@ -58,7 +58,7 @@
       - 全局和用户特定的MCP服务器配置
 
 - **工作流程**
-![alt text](assets/image_process1.png)
+![alt text](assets/image_process1.png)  
    1. 用户通过Web界面发送查询
    2. 后端服务接收查询并转发给Bedrock模型
    3. 如果模型需要使用工具,MCP客户端会调用相应的MCP服务器
@@ -450,6 +450,8 @@ docker build -t mcp/aws-kb-retrieval:latest -f src/aws-kb-retrieval-server/Docke
 - 点击小话筒，可以体验端到端语音Agent模式，在该模式下，使用的是[Nova Sonic Speech 2 Speech模型](https://docs.aws.amazon.com/nova/latest/userguide/speech.html)，目前仅支持英文对话和三种音色输出。
 Nova Sonic模型支持Function call，所以也能添加MCP server，例如，开启tavily search 和 time mcp server之后，语音输出问“what is the weather of beijing”。可以看到Nova Sonic模型会监听话筒，并直接在输出语音回复，并同时把语音输入和输出转成文字显示到对话框中  
 ![alt text](assets/sonic_1.png)
+- 实时语音流程  
+![alt text](assets/voice_flow.png)
 
 ## 7. Awsome MCPs
 - AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples

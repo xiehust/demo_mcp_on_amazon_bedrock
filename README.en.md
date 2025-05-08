@@ -19,9 +19,10 @@
 ![alt text](assets/image-aws-arch.png)
 - This project provides ChatBot interaction services based on Nova, Claude, and other large models in **Bedrock**, while introducing **MCP** to greatly enhance and extend the application scenarios of ChatBot-form products, supporting seamless integration with local file systems, databases, development tools, internet searches, etc. If a ChatBot containing a large model is equivalent to a brain, then introducing MCP is like equipping it with arms and legs, truly making the large model move and connect with various existing systems and data.
 - **This Demo Solution Architecture**
-![arch](assets/arch.png)
+![arch](assets/arch.png)  
 - **Core Components**
-![alt text](assets/core_comp.png)
+
+![alt text](assets/core_comp.png)  
    1. MCP Client (mcp_client.py)
       - Responsible for managing connections to multiple MCP servers
       - Handles tool calls and resource access
@@ -49,7 +50,7 @@
       - Support for dynamically adding and removing MCP servers
       - Global and user-specific MCP server configurations
 - **Workflow**
-![alt text](assets/image_process1.png)
+![alt text](assets/image_process1.png)  
    1. User sends a query through the Web interface
    2. Backend service receives the query and forwards it to the Bedrock model
    3. If the model needs to use tools, the MCP client calls the corresponding MCP server
@@ -100,10 +101,10 @@ aws dynamodb create-table \
 ```
 ### 2.4 Configuration Editing (Using Bedrock in Regions Outside China)
 > Tips: If you need to configure multiple account ak/sk using a rotation mechanism, you can add a `credential.csv` in the conf/ directory with column names **ak** and **sk**, and fill in multiple ak/sk pairs, for example:
-| ak | sk |
-| ----- | ----- |
-| ak 1 | sk 1 |
-| ak 2 | sk 2 |
+ak,sk  
+ak1,sk1  
+ak2,sk2  
+
 Run the following command to create an .env file, **please modify AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION and other information before running**
 ```bash
 cat << EOF > .env
@@ -362,6 +363,7 @@ you have capability:
 ![alt text](assets/image_deepresearch_2.png)
 - **Sequence Diagram: Using Search API MCP Server**
 ![alt text](assets/image-seq1.png)
+
 ###  5.4. Using Amazon Knowledge Base
 First create or use an existing Bedrock Knowledge Base in the Bedrock console, and note down the Knowledge Base Id
 Clone [AWS Knowledge Base Retrieval MCP Server](https://github.com/modelcontextprotocol/servers) locally, and replace the file in `src/aws-kb-retrieval-server/index.ts` with the file from [assets/aws-kb-retrieval-server/index.ts)](assets/aws-kb-retrieval-server/index.ts).
@@ -393,6 +395,8 @@ Then add this json file on the chatbot interface, note that the fields in env ne
 - Click on the microphone icon to experience end-to-end voice Agent mode. In this mode, the [Nova Sonic Speech 2 Speech model](https://docs.aws.amazon.com/nova/latest/userguide/speech.html) is used, which currently only supports English conversations and three voice output tones.
 Nova Sonic model supports Function call, so it can also add MCP servers. For example, after enabling tavily search and time mcp server, ask in voice "what is the weather of beijing". You can see that the Nova Sonic model will listen to the microphone and directly respond with voice output, while simultaneously converting the voice input and output into text displayed in the chat box.
 ![alt text](assets/sonic_1.png)
+- Voice Integration flow  
+![alt text](assets/voice_flow.png)
 
 ## 7. Awesome MCPs
 - AWS MCP Servers Samples https://github.com/aws-samples/aws-mcp-servers-samples
