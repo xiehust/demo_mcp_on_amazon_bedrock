@@ -133,6 +133,10 @@ class ChatClient:
             additionalModelRequestFields = {}
             inferenceConfig={"maxTokens":max_tokens,"temperature":temperature,}
         
+        # 如新一轮对话里没有启用mcp server，则需要清除之前的tool use content，否则会报错
+        if len(messages) > 0 and not tool_config['tools']:
+            messages = filter_tool_use_result(messages)
+            
         requestParams = dict(
                     modelId=model_id,
                     messages=messages,
@@ -142,9 +146,6 @@ class ChatClient:
         )
         requestParams = {**requestParams, 'toolConfig': tool_config} if  tool_config['tools'] else requestParams
         
-        # 如新一轮对话里没有启用mcp server，则需要清除之前的tool use content，否则会报错
-        if len(messages) > 0 and not tool_config['tools']:
-            messages = filter_tool_use_result(messages)
         # logger.info(f"requestParams: {requestParams}")
 
         # invoke bedrock llm with user query
