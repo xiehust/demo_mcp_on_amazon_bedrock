@@ -11,7 +11,7 @@ import boto3
 from botocore.config import Config
 from dotenv import load_dotenv
 from mcp_client import MCPClient
-from utils import maybe_filter_to_n_most_recent_images
+from utils import maybe_filter_to_n_most_recent_images,filter_tool_use_result
 import pandas as pd
 load_dotenv()  # load environment variables from .env
 
@@ -142,6 +142,9 @@ class ChatClient:
         )
         requestParams = {**requestParams, 'toolConfig': tool_config} if  tool_config['tools'] else requestParams
         
+        # 如新一轮对话里没有启用mcp server，则需要清除之前的tool use content，否则会报错
+        if len(messages) > 0 and not tool_config['tools']:
+            messages = filter_tool_use_result(messages)
         # logger.info(f"requestParams: {requestParams}")
 
         # invoke bedrock llm with user query
