@@ -21,7 +21,7 @@
 			"model_name": "Amazon Nova Pro v1"
 		},
 		{
-			"model_id": "us.amazon.nova-lite-v1:0",
+			"model_id": "amazon.nova-lite-v1:0",
 			"model_name": "Amazon Nova Lite v1"
 		},
 		{
