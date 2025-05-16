@@ -1,5 +1,19 @@
 # MCP on Amazon Bedrock[[English Readme](./README.en.md)]
 ### 更新日志
+- [20250516] 增加streamable http（简单token方式鉴权）
+  - 目前只支持简单的Beaer token方式验证，配置示例：add server添加json配置 
+  ```json
+  {
+    "mcpServers": {
+      "MCPServerApi": {
+        "url": "https://xxx.execute-api.us-east-1.amazonaws.com/Prod/mcp",
+        "token":"123456"
+      }
+    }
+  }
+  ``` 
+  可以用aws lambda开发部署serverless http stream sever，参考示例：https://github.com/mikegc-aws/Lambda-MCP-Server
+
 - [20250507] 新增Nova Premier和Nova Sonic 语音Agent模式，见第6节介绍
  - ⚠️ 如果在ec2部署，需要使用[HTTPS方式部署](HTTPS_SETUP.md)，如果在本地则沿用之前的部署方式.
 
@@ -101,6 +115,7 @@ NodeJS [下载安装](https://nodejs.org/en)，本项目已对 `v22.12.0` 版本
 下载克隆该项目后，进入项目目录创建 Python 虚拟环境并安装依赖：
 ```bash
 sudo apt update
+sudo apt-get install clang
 sudo apt-get install portaudio19-dev
 uv sync
 ```
