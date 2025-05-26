@@ -89,7 +89,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                         break
                 
                     # Process deepseek-r1 chunk
-                    if model_id in ["Pro/deepseek-ai/DeepSeek-R1"]:
+                    if "deepseek-r1" in model_id.lower():
                         if hasattr(chunk, 'choices') and chunk.choices:
                             choice = chunk.choices[0]
 
@@ -384,7 +384,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                 
             try:
                 # Make the API request using the OpenAI SDK directly
-                response = deepseek_r1_chat_stream(**request_payload) if model_id in ["Pro/deepseek-ai/DeepSeek-R1"] else self.openai_client.chat.completions.create(**request_payload)
+                response = deepseek_r1_chat_stream(**request_payload) if "deepseek-r1" in model_id.lower() else self.openai_client.chat.completions.create(**request_payload)
                 
                 # Process the streaming response
                 # yield twice (event+tool_result)

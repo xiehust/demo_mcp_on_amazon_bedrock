@@ -177,7 +177,7 @@ class CompatibleChatClient(ChatClient):
     def _convert_openai_response_to_bedrock_format(self, response, model_id):
         """Convert OpenAI response to Bedrock format"""
 
-        if model_id in ["Pro/deepseek-ai/DeepSeek-R1"]:
+        if "deepseek-r1" in model_id.lower():
             return response
 
         message = response.choices[0].message
@@ -304,7 +304,7 @@ class CompatibleChatClient(ChatClient):
                 #logger.info(f"Payload: {request_payload}")
 
                 # Make the API request using the OpenAI SDK
-                response = deepseek_r1_chat(**request_payload) if model_id in ["Pro/deepseek-ai/DeepSeek-R1"] else self.openai_client.chat.completions.create(**request_payload)
+                response = deepseek_r1_chat(**request_payload) if "deepseek-r1" in model_id.lower() else self.openai_client.chat.completions.create(**request_payload)
                 
                 # Convert OpenAI response to Bedrock format
                 bedrock_response = self._convert_openai_response_to_bedrock_format(response, model_id)
