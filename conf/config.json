@@ -58,13 +58,6 @@
 		}
 	],
 	"mcpServers": {
-		"cot": {
-			"command": "npx",
-			"args": [
-			  "-y",
-			  "@modelcontextprotocol/server-sequential-thinking"
-			]
-		},
 		"local_fs": {
 			"command": "npx",
 			"args": [
