@@ -1,14 +1,6 @@
 {
 	"models": [
 		{
-			"model_id": "us.anthropic.claude-sonnet-4-20250514-v1:0",
-			"model_name": "Claude 4 Sonnet"
-		},
-		{
-			"model_id": "us.anthropic.claude-opus-4-20250514-v1:0",
-			"model_name": "Claude 4 opus"
-		},
-		{
 			"model_id": "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
 			"model_name": "Claude 3.7 Sonnet"
 		},
@@ -47,6 +39,10 @@
 		{
 			"model_id": "deepseek-ai/DeepSeek-V3",
 			"model_name": "DeepSeek-V3-free"
+		},
+		{
+			"model_id": "Pro/deepseek-ai/DeepSeek-R1",
+			"model_name": "DeepSeek-R1-Pro"
 		}
 	],
 	"mcpServers": {
