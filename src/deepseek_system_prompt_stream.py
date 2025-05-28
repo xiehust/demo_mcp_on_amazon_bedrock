@@ -92,15 +92,20 @@ Example 2:
 In example 2, the tool set contains two tools "read_multiple_files" and "write_file". A tool set can also contain more tools if you expand this example.
 
 <h5>Response format</h5>
-When you do not invoke any tools, please only reply with texts. However, if you need to invoke a tool for the task, please add tool-use instructions after your regular text responses. 
-Your response with tool-use instructions must adhere to this frame: text_response_here<t>{"tool_calls":[{"tool_name":"name of the tool you want to use","parameters":{"parameter1":"parameter1_value","parameter2":"parameter2_value"}}],"task_complete":"task_complete_value"} The frame has a special token <t> in it, which shows this response contains a tool invoking besides regular text response. You need to add this special token before tool-use instructions when you want to invoke a tool, but you do not need to add a close tag </t> after the tool-use instructions. After the special token <t> follows the tool-use instruction, which will be parsed by the user for invoking tool. The value of key "tool_calls" is a list containing tools you invoke and their parameters. When you use a tool, please make sure to include name of the tool, and parameters for the tool. 
+When you do not invoke any tools, please only reply with texts. However, if you need to invoke a tool for the task, please add tool-use instructions after your regular text responses.
+Your response with tool-use instructions must adhere to this response frame: 
+regular_text_response_here<t>{"tool_calls":[{"tool_name":"name of the tool you want to use","parameters":{"parameter1":"parameter1_value","parameter2":"parameter2_value"}}],"task_complete":"task_complete_value"}</t>
+The frame has special tags <t> and </t> in it, which shows this response contains a tool-use in addition to the regular text response. You need to use special tags <t> and </t> to encompass tool-use instructions when you want to invoke a tool, like shown above in the response frame. The tool-use instructions within <t> and </t> will be parsed by the user for invoking tool. 
+The value of key "tool_calls" is a list containing the tool you invoke and its parameters. As mentioned earlier, each response may use only one tool and only once, to guarantee correctness of response format. When you use a tool, please make sure to include name of the tool, and parameters for the tool. 
 If you do not use any tools, just reply with normal text outputs. "task_complete" shows the status of the ongoing task. If you think you do not need to wait for tool-use results for this task anymore, set the value of "task_complete" to "true", 
-otherwise set it to "false" and continute to invoke tools and wait for tool-use results in subsequent responses. The response frame is a normal string, not a JSON string, so never output ```json``` to show it as a JSON string. Please only use double quotes rather than single quotes to encompass strings in the response frame.
+otherwise set it to "false" and continute to invoke tools and wait for tool-use results in subsequent responses. The response frame is a normal string, not a JSON string, so never output ```json``` to display it as a JSON string. Please only use double quotes rather than single quotes to encompass strings in the response frame.
+Here are some examples of response format.
 Example 1. If the task is "please tell me the weather of Osaka today", and you need to invoke the "get_today_weather" tool, then a valid response with tool-use instruction is like: 
-I will use "get_today_weather" tool for this task.<t>{"tool_calls":[{"tool_name":"get_weather","parameters":{"location":"Osaka","unit": "celsius"}}],"task_complete":"false"}
+I will use "get_today_weather" tool for this task.<t>{"tool_calls":[{"tool_name":"get_weather","parameters":{"location":"Osaka","unit": "celsius"}}],"task_complete":"false"}</t>
+NOTE: Do not use more than 1 tool in one response. Do not invoke a tool twice.
 Example 2. If the task is "please tell me the result of 1+1", because this is a pure arithmetic question, you do not need to invoke any tools, so just answer with regular text response, such as:
 The result of 1+1 is 2.
-ATTENTION: You MUST adhere to the stipulated response format. The user will be very angry if you outputs extra tokens besides this stipulated response format. Never add </t> to the end of tool-use'''
+NOTE: You MUST adhere to the stipulated response format. Do not include any tool-use instructions in the regular text response, because regular text response and tool-use instruction are separate. The user will be very angry if you outputs extra words besides the stipulated response format.'''
 
 
 

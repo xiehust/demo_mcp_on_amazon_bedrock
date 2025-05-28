@@ -133,7 +133,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                                     txt_tmp += answer
                                     if "<t>" in txt_tmp:
                                         match = re.search(r"(.*)<t>", txt_tmp, re.DOTALL)
-                                        match_chunk_text = match.group(0).replace("<t>", "")
+                                        match_chunk_text = match.group(1)
                                         r1_text_response += match_chunk_text
                                         outputing_text = False
                                         logger.info(f"Last answer before tool: {match_chunk_text}")
@@ -150,7 +150,8 @@ class CompatibleChatClientStream(CompatibleChatClient):
                                 # if tool call exists, extract and return
                                 if choice.finish_reason == "stop":
                                     if "<t>" in r1_content:
-                                        dict_r1_content = json.loads(r1_content.strip().split("<t>")[1])
+                                        extracted_toolcall = re.search("<t>(.*?)</t>", r1_content.strip(), re.DOTALL).group(1)
+                                        dict_r1_content = json.loads(extracted_toolcall)
                                         if dict_r1_content["tool_calls"]: 
                                             r1_status = "tool_calls"
                                         else:
