@@ -74,7 +74,10 @@ class CompatibleChatClient(ChatClient):
                     if isinstance(item, dict):
                         # Handle text content
                         if "text" in item:
-                            content.append({"type": "text", "text": item["text"]})
+                            if role == "user":
+                                content = item["text"] #deepseek api only support this type
+                            else:
+                                content.append({"type": "text", "text": item["text"]})
                         
                         # Handle image content
                         elif "image" in item and "source" in item["image"]:

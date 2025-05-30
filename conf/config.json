@@ -47,6 +47,10 @@
 		{
 			"model_id": "deepseek-ai/DeepSeek-R1",
 			"model_name": "DeepSeek-R1-free"
+		},
+		{
+			"model_id": "deepseek-reasoner",
+			"model_name": "DeepSeek-R1-0528-official"
 		}
 	],
 	"mcpServers": {
