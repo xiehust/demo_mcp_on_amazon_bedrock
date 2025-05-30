@@ -33,6 +33,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+#Now deepseek-r1-0528 has supported tool use, skip the PE function call
+TOOL_USE_SUPPORT = False
+
 class CompatibleChatClientStream(CompatibleChatClient):
     """Extended ChatClient with OpenAI v1/chat/completions API compatibility for streaming"""
     
@@ -89,7 +92,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                         break
                 
                     # Process deepseek-r1 chunk
-                    if "deepseek-r1" in model_id.lower():
+                    if "deepseek-r1" in model_id.lower() and not TOOL_USE_SUPPORT:
                         if hasattr(chunk, 'choices') and chunk.choices:
                             choice = chunk.choices[0]
 
@@ -110,7 +113,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                             # Content delta
                             if hasattr(choice, 'delta') and hasattr(choice.delta, 'content') and choice.delta.content is not None:
                                 answer = choice.delta.content
-                                logger.info(f"Chunk content: {answer}")
+                                # logger.info(f"Chunk content: {answer}")
         
                                 # Collect all "content" values for extracting tool-use command
                                 # pay attention to the sequence of code execution, it counts
@@ -124,7 +127,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                                     # 2. txt_tmp is empty, but < output appears as part of <t> or <tr>
                                     # 3. txt_tmp is not empty which means < in it. Concat two chunks and check whether <t> is in
                                     if txt_tmp == "" and choice.finish_reason == "stop":
-                                        logger.info(f"Answer text: {answer}")
+                                        # logger.info(f"Answer text: {answer}")
                                         outputing_text = False
                                         yield {"type": "block_delta", "data": {"delta": {"text": answer}}}
                                     elif txt_tmp == "":
@@ -139,11 +142,11 @@ class CompatibleChatClientStream(CompatibleChatClient):
                                         logger.info(f"Last answer before tool: {match_chunk_text}")
                                         if match_chunk_text: yield {"type": "block_delta", "data": {"delta": {"text": match_chunk_text}}}
                                     elif "<t>" not in txt_tmp:
-                                        logger.info(f"Answer text: {txt_tmp}")
+                                        # logger.info(f"Answer text: {txt_tmp}")
                                         yield {"type": "block_delta", "data": {"delta": {"text": txt_tmp}}}
                                     txt_tmp = ""
                                 elif answer and outputing_text:
-                                    logger.info(f"Answer text: {answer}")
+                                    # logger.info(f"Answer text: {answer}")
                                     yield {"type": "block_delta", "data": {"delta": {"text": answer}}}
                                 
                                 # check whether there is a tool_call
@@ -385,7 +388,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                 
             try:
                 # Make the API request using the OpenAI SDK directly
-                response = deepseek_r1_chat_stream(**request_payload) if "deepseek-r1" in model_id.lower() else self.openai_client.chat.completions.create(**request_payload)
+                response = deepseek_r1_chat_stream(**request_payload) if "deepseek-r1" in model_id.lower() and not TOOL_USE_SUPPORT else self.openai_client.chat.completions.create(**request_payload)
                 
                 # Process the streaming response
                 # yield twice (event+tool_result)
@@ -530,6 +533,7 @@ class CompatibleChatClientStream(CompatibleChatClient):
                             
                             # Update OpenAI messages format for the next request
                             openai_messages = self._convert_messages_to_openai_format(messages, system)
+                            # logger.info(openai_messages)
                             request_payload["messages"] = openai_messages
                             
                             # Reset state
