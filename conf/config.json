@@ -59,6 +59,10 @@
 		{
 			"model_id": "deepseek-reasoner",
 			"model_name": "DeepSeek-R1-0528-official"
+		},
+		{
+			"model_id": "deepseek-chat",
+			"model_name": "DeepSeek-v3-official"
 		}
 	],
 	"mcpServers": {
