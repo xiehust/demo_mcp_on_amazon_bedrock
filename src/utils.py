@@ -278,7 +278,7 @@ def filter_tool_use_result(
     return filtered_messages
     
 def maybe_redact_old_text_content(
-    messages: list,
+    messages: list, 
     window_size: int = 10,
     min_redaction_threshold: int = 1,
     text_length_threshold: int = 1000,

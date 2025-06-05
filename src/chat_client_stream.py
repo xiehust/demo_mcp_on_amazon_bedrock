@@ -9,7 +9,7 @@ import logging
 from typing import Dict, AsyncGenerator, Optional, List, AsyncIterator
 import json
 import boto3
-from botocore.config import Config
+from botocore.config import Config 
 from dotenv import load_dotenv
 from chat_client import ChatClient
 import base64
