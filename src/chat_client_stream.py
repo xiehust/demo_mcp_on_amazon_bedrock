@@ -9,12 +9,12 @@ import logging
 from typing import Dict, AsyncGenerator, Optional, List, AsyncIterator
 import json
 import boto3
-from botocore.config import Config
+from botocore.config import Config 
 from dotenv import load_dotenv
 from chat_client import ChatClient
 import base64
 from mcp_client import MCPClient
-from utils import maybe_filter_to_n_most_recent_images,remove_cache_checkpoint,filter_tool_use_result
+from utils import maybe_filter_to_n_most_recent_images,remove_cache_checkpoint,filter_tool_use_result,maybe_redact_old_text_content
 from botocore.exceptions import ClientError
 import random
 import time
@@ -443,10 +443,13 @@ class ChatClientStream(ChatClient):
                             messages.append(tool_result_message)
                             
                             if only_n_most_recent_images:
-                                maybe_filter_to_n_most_recent_images(
+                                messages = maybe_filter_to_n_most_recent_images(
                                     messages,
                                     only_n_most_recent_images,
                                     min_removal_threshold=image_truncation_threshold,
+                            )
+                            messages = maybe_redact_old_text_content(
+                                messages,
                             )
 
                             logger.info(f"Call new turn : message length:{len(messages)}")

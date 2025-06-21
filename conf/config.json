@@ -31,47 +31,8 @@
 		{
 			"model_id": "us.amazon.nova-lite-v1:0",
 			"model_name": "Amazon Nova Lite v1"
-		},
-		{
-			"model_id": "Qwen/Qwen3-235B-A22B",
-			"model_name": "Qwen3-235B-A22B"
-		},
-		{
-			"model_id": "Qwen/Qwen3-30B-A3B",
-			"model_name": "Qwen3-30B-A3B"
-		},
-		{
-			"model_id": "Pro/deepseek-ai/DeepSeek-V3",
-			"model_name": "DeepSeek-V3-Pro"
-		},
-		{
-			"model_id": "deepseek-ai/DeepSeek-V3",
-			"model_name": "DeepSeek-V3-free"
-		},
-		{
-			"model_id": "Pro/deepseek-ai/DeepSeek-R1",
-			"model_name": "DeepSeek-R1-Pro"
-		},
-		{
-			"model_id": "deepseek-ai/DeepSeek-R1",
-			"model_name": "DeepSeek-R1-free"
-		},
-		{
-			"model_id": "deepseek-reasoner",
-			"model_name": "DeepSeek-R1-0528-official"
 		}
 	],
 	"mcpServers": {
-		"local_fs": {
-			"command": "npx",
-			"args": [
-				"-y",
-				"@modelcontextprotocol/server-filesystem",
-				"./docs"
-			],
-			"env": {},
-			"description": "Local File System I/O",
-			"status": 1
-		}
 	}
 }
