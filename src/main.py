@@ -717,7 +717,8 @@ async def add_mcp_server(
             "command": server_cmd,
             "args": server_script_args,
             "env": server_script_envs,
-            "description": server_desc
+            "description": server_desc,
+            "token":token,
         }
         await save_user_server_config(user_id, server_id, server_config)
         
